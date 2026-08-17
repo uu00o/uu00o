@@ -3,6 +3,7 @@
 /*
 !/frosted-electron/
 !/.gitignore
+!/README.md
 
 # ============ frosted-electron 内部通用忽略 ============
 # Node / 构建产物
