@@ -1,0 +1,14 @@
+{
+  "name": "dsh-frosted-electron",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DSH Web GUI 透明磨砂玻璃窗口壳：无边框透明窗口加载 http://127.0.0.1:3080，透明度可调，透过窗口看到桌面",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-packager": "^17.1.2"
+  }
+}

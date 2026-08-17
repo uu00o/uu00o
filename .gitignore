@@ -1,0 +1,35 @@
+# ============ 只提交 frosted-electron 源码（构建产物/依赖不入库） ============
+/*
+!/frosted-electron/
+!/.gitignore
+!/README.md
+
+# ============ frosted-electron 内部忽略 ============
+# Node / 构建产物
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.npm/
+.npm-cache/
+
+# 构建时生成的运行时依赖（由 build.ps1 自动生成，不进仓库）
+frosted-electron/vendor/
+
+# Electron 下载缓存
+.electron-cache/
+
+# 本地测试残留
+.test-*/
+
+# 调试脚本 / 截图备份
+diag-*.js
+debug-*.js
+page-*.png
+bat-out.txt
+
+# 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store

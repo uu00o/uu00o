@@ -1,0 +1,64 @@
+# DSH Frosted Glass
+
+透明磨砂玻璃窗口壳：以无边框透明窗口加载 DSH（DeepSeek Harness）Web 界面（默认 `http://127.0.0.1:3080`），窗口透明度可调，透过窗口可以看到桌面。
+
+## 功能特性
+
+- **一键启动**：双击 exe 即可——自动探测 node 与 DSH CLI → 检查 3080 端口 → 若服务未运行则后台拉起 → 等待就绪 → 打开磨砂玻璃窗口
+- **透明磨砂窗口**：无边框透明 Electron 窗口，Apple 风格毛玻璃质感（噪点 + 高光 + 模糊 + 顶部亮边），透明度滑杆可调（0% = 跟随主题的完全不透明，100% = 最透明且界面不消失）
+  - Windows 11（开启系统"透明效果"）自动使用系统级 **Acrylic 材质**，真正模糊桌面
+  - Windows 10 / 未开启系统透明时回退透明窗口方案，任何版本都能透出桌面
+- **深色模式适配**：磨砂层实时跟随 DSH 深浅主题切换，深色模式下为深色玻璃
+- **自包含分发**：构建产物内置 `node.exe` 与完整的 `@deepseek-ai/dsh`（含全部依赖），开箱即用，无需安装 node 或 dsh
+- **稳定运行**：无 2 秒全页轮询（避免重渲染风暴）；渲染进程崩溃自动重建窗口，不闪退；崩溃原因记录到 `%LOCALAPPDATA%\DSHFrostedGlass\frost-crash.log`
+- **智能退出**：窗口全部关闭时，若 DSH 服务由本实例拉起，则一并退出
+- **开机自启开关**：`自启开关.bat` 一键设置/取消开机自启
+
+## 目录结构
+
+```
+frosted-electron/
+├── main.js                 # Electron 主进程（窗口 + 服务拉起 + 磨砂注入）
+├── preload.js              # 预加载脚本（控制条/拖拽 IPC 桥）
+├── package.json            # 项目配置（Electron 33）
+├── build.ps1               # 一键构建脚本（生成可分发 exe 包）
+├── start.bat               # 开发机直接启动脚本
+├── 自启开关.bat            # 开机自启开关
+├── make-icon.ps1           # 生成/替换图标脚本
+├── icon.ico
+└── screen.png              # 效果截图
+```
+
+## 运行方式
+
+```bash
+# 开发运行（需本机已安装 node 与 electron）
+npm install
+npm start
+```
+
+或使用 `start.bat`（会自动拉起 DSH 服务并打开磨砂窗口）。
+
+## 自行构建（生成可分享的 exe）
+
+需要：Windows + Node.js 18+（构建机）
+
+```powershell
+cd frosted-electron
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
+
+脚本自动完成：安装依赖（electron / electron-packager / @deepseek-ai/dsh）→ 复制本机 node.exe → 打包 Electron 壳 → 内嵌 vendor → 产出 `dist\DSHFrostedGlass-win32-x64\`。
+
+> 构建产物约 500MB（含 Electron 运行时与 dsh 依赖）。分享时请**整个文件夹一起发**（含 `resources\app\vendor`），单独拷 exe 无法工作。国内网络较慢时可取消 `build.ps1` 中镜像配置的注释（npmmirror）。
+
+## 技术说明
+
+| 项 | 说明 |
+|---|---|
+| 窗口 | Electron 无边框；Win11+系统透明开启时 `backgroundMaterial: 'acrylic'`，否则 `transparent: true` |
+| 服务启动 | `spawn(node, [cli, '--profile', 'web'])`，端口可用 `DSH_PORT` 环境变量覆盖并透传 `--port` |
+| 磨砂注入 | `insertCSS` + `executeJavaScript` 幂等注入（重复注入先移除旧样式），含多次兜底重注入 |
+| 透明度 | CSS 变量 `--frost-alpha`（1=实心，0.15=最透明），所有覆盖层直接引用，显示值与实际严格一致 |
+| 主题 | 监听 `body[data-ds-dark-theme]` 镜像到 `html.frost-dark`，深浅主题分别使用白/深色玻璃 |
+| 崩溃恢复 | `render-process-gone` 自动重建窗口（1 分钟内超 3 次才放弃），日志写入 `frost-crash.log` |
