@@ -86,7 +86,7 @@ function checkPort (port, timeoutMs = 3000) {
 }
 
 // 后台拉起 DSH 服务，日志写入 %LOCALAPPDATA%\DSHFrostedGlass\dsh-service.log
-function startDshService () {
+function startDshService (extraArgs) {
   const node = findNode()
   const cli = findDshCli()
   if (!cli) {
@@ -101,6 +101,7 @@ function startDshService () {
     fs.writeSync(logFd, `[diag] bundledCli=${BUNDLED_DSH_CLI} exists=${fs.existsSync(BUNDLED_DSH_CLI)}\n`)
     const cliArgs = [cli, '--profile', DSH_PROFILE]
     if (process.env.DSH_PORT) cliArgs.push('--port', String(PORT))
+    if (Array.isArray(extraArgs)) cliArgs.push(...extraArgs)
     serviceProc = spawn(node, cliArgs, {
       cwd: pickServiceCwd(),
       windowsHide: true,                       // 不弹黑色命令行窗口
@@ -607,6 +608,54 @@ const TAB_JS = `
 `
 
 // ============================================================================
+// 移动端控制按钮（右下角控制条"移"）：一键开启/关闭局域网访问。
+// 开启：主进程把 DSH 服务绑定到局域网 IP 并显示访问地址，手机浏览器即可控制；
+// 关闭：恢复仅本机访问。开启前主进程会弹出安全确认。
+// ============================================================================
+const MOBILE_JS = `
+(function () {
+  if (document.getElementById('frost-mobile')) return
+  function ensure () {
+    if (document.getElementById('frost-mobile')) return true
+    var ctl = document.getElementById('frost-ctl')
+    if (!ctl) return false
+    var btn = document.createElement('button')
+    btn.id = 'frost-mobile'
+    btn.title = '移动端控制（局域网访问）'
+    btn.textContent = '移'
+    btn.style.cssText = 'border:0;background:transparent;color:#4a5578;font-size:12px;cursor:pointer;padding:2px 6px;border-radius:8px;line-height:1;'
+    btn.addEventListener('mouseenter', function () { btn.style.background = 'rgba(109,124,255,0.22)' })
+    btn.addEventListener('mouseleave', function () { btn.style.background = 'transparent' })
+    btn.addEventListener('mousedown', function (e) { e.stopPropagation() })
+    btn.addEventListener('click', function (e) { e.stopPropagation(); toggleMobile(btn) })
+    ctl.appendChild(btn)
+    return true
+  }
+  function toggleMobile (btn) {
+    if (!window.frostAPI || !window.frostAPI.mobileToggle) { alert('当前环境不支持移动端控制'); return }
+    btn.disabled = true
+    btn.textContent = '…'
+    window.frostAPI.mobileToggle().then(function (res) {
+      btn.disabled = false
+      if (res && res.ok) {
+        btn.textContent = '移'
+        // 访问地址由主进程弹框显示，窗口随后跳转
+      } else if (res && res.cancelled) {
+        btn.textContent = '移'
+      } else {
+        alert('操作失败：' + ((res && res.error) || '未知错误'))
+        btn.textContent = '移'
+      }
+    }).catch(function () { btn.disabled = false; btn.textContent = '移' })
+  }
+  if (!ensure()) {
+    var obs = new MutationObserver(function () { if (ensure()) obs.disconnect() })
+    obs.observe(document.body, { childList: true, subtree: true })
+  }
+})()
+`
+
+// ============================================================================
 // 已归档对话查看面板：通过 DSH 原生 API（/api/workspace.list + session.list +
 // session.history）列出归档会话并只读查看对话内容。磨砂风格，与 FROST 一致。
 // ============================================================================
@@ -850,6 +899,7 @@ function createWindow () {
       frostCssKey = await win.webContents.insertCSS(FROST_CSS)
       win.webContents.executeJavaScript(FROST_JS)
       win.webContents.executeJavaScript(TAB_JS)
+      win.webContents.executeJavaScript(MOBILE_JS)
       win.webContents.executeJavaScript(ARCHIVE_JS)
     } catch (err) {
       console.log('[frost-inject-err] ' + String(err))
@@ -1050,9 +1100,104 @@ ipcMain.handle('frost:restore-archived', async (e, sessionIds) => {
 })
 
 // ============================================================================
-// 启动流程：先确保 DSH 服务就绪，再打开磨砂窗口
+// 移动端控制：一键把 DSH Web 服务绑定到局域网 IP，手机浏览器访问控制。
+// 安全：开启前弹框确认；仅绑定具体局域网 IP（非 0.0.0.0）；关闭即恢复仅本机。
+// 注：打包内 dsh-host-webserver 的 host schema 已放宽以允许局域网 IP（0.1.0-rc.6
+// 官方默认只允许 127.0.0.1/0.0.0.0，且 0.0.0.0 被启动逻辑禁止）。
 // ============================================================================
-let recovering = false   // 渲染进程崩溃后正在自动重建窗口（期间 window-all-closed 不退出）
+let mobileActive = false
+let mobileLanIp = null
+
+function detectLanIp () {
+  const ifaces = os.networkInterfaces()
+  for (const list of Object.values(ifaces)) {
+    for (const i of list || []) {
+      if (i.family === 'IPv4' && !i.internal) return i.address
+    }
+  }
+  return null
+}
+
+function tryAddFirewallRule (port) {
+  try {
+    execFileSync('netsh', [
+      'advfirewall', 'firewall', 'add', 'rule',
+      'name=DSH Frosted Mobile', 'dir=in', 'action=allow',
+      'protocol=TCP', 'localport=' + String(port)
+    ], { windowsHide: true, timeout: 8000 })
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// 在 127.0.0.1 与局域网 IP 绑定之间切换 DSH 服务
+async function switchServiceBind (onLan) {
+  const wasOurs = serviceStartedByUs
+  await stopOwnedService()
+  serviceStartedByUs = false
+  let r
+  if (onLan) {
+    const ip = detectLanIp()
+    if (!ip) return { ok: false, error: '未检测到局域网 IP（请确认已连接网络）' }
+    r = startDshService(['--host', ip, '--trusted-host', ip])
+    mobileLanIp = ip
+  } else {
+    r = startDshService()
+    mobileLanIp = null
+  }
+  if (!r.ok) return r
+  const up = await waitForService(60 * 1000)
+  if (!up) return { ok: false, error: 'DSH 服务重启超时' }
+  serviceStartedByUs = wasOurs
+  mobileActive = onLan
+  return { ok: true }
+}
+
+ipcMain.handle('frost:mobile-toggle', async (e) => {
+  if (!mobileActive) {
+    // 开启前：确认弹框 + 风险提示
+    const choice = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: ['开启移动端控制', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+      title: 'DSH 磨砂玻璃 - 移动端控制',
+      message: '开启后，手机（同一局域网）可访问并控制本机的 DeepSeek Harness（可执行命令）。',
+      detail: '安全警告：开启期间，同一 Wi-Fi / 局域网内的任何人都无需密码即可控制本机执行命令！请仅在可信网络使用，用完立即关闭。',
+    })
+    if (choice.response !== 0) return { ok: false, cancelled: true }
+    const ip = detectLanIp()
+    if (!ip) return { ok: false, error: '未检测到局域网 IP（请确认已连接网络）' }
+    const r = await switchServiceBind(true)
+    if (!r.ok) return r
+    const fw = tryAddFirewallRule(PORT)
+    const url = 'http://' + ip + ':' + PORT
+    logFrost('[mobile] enabled at ' + url + ' firewall=' + fw)
+    const win = BrowserWindow.fromWebContents(e.sender)
+    // 先让用户看到访问地址，再跳转窗口
+    if (win && !win.isDestroyed()) {
+      await dialog.showMessageBox({
+        type: fw ? 'info' : 'warning',
+        title: '移动端控制已开启',
+        message: '访问地址：' + url,
+        detail: '手机连接同一 Wi-Fi 后，用浏览器打开上面的地址即可控制本机。\n\n关闭方式：回到本机窗口，再次点击右下角"移"按钮。\n' + (fw ? '' : '警告：未能自动配置 Windows 防火墙，手机可能无法访问；请手动放行入站 TCP 端口 ' + PORT + '。'),
+        noLink: true,
+      })
+      win.loadURL(url)
+    }
+    return { ok: true, url, firewall: fw }
+  }
+  // 关闭：恢复仅本机
+  const r = await switchServiceBind(false)
+  if (!r.ok) return r
+  logFrost('[mobile] disabled')
+  const win = BrowserWindow.fromWebContents(e.sender)
+  if (win && !win.isDestroyed()) win.loadURL(TARGET_URL)
+  return { ok: true, url: TARGET_URL }
+})
+
 
 app.whenReady().then(async () => {
   const boot = await ensureDshService()

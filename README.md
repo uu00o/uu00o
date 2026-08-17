@@ -12,6 +12,7 @@
 - **标签页切换**：窗口顶部标签栏在「对话 / SSH / 任务看板」间一键切换，三个界面互斥显示、不叠加（SSH 与任务看板由 dsh-web-ui 全家桶插件提供）
 - **归档对话**：控制条的归档按钮列出已归档会话，可只读查看对话内容；「恢复」按钮将会话移出归档并自动重启服务，回到活跃列表即可继续对话
 - **交互兼容**：全局窗口拖拽自动排除 SSH 终端（xterm）文本选择、面板与弹窗操作、原生拖拽元素；磨砂控制条层级让位于插件弹窗，不再遮挡
+- **移动端控制**：控制条「移」按钮一键开启/关闭局域网访问——开启后手机（同一 Wi-Fi）浏览器打开访问地址即可控制本机；开启前有安全确认与警告，关闭即恢复仅本机访问
 - **自包含分发**：构建产物内置 `node.exe` 与完整的 `@deepseek-ai/dsh`（含全部依赖），开箱即用，无需安装 node 或 dsh
 - **稳定运行**：无 2 秒全页轮询（避免重渲染风暴）；渲染进程崩溃自动重建窗口，不闪退；崩溃原因记录到 `%LOCALAPPDATA%\DSHFrostedGlass\frost-crash.log`
 - **智能退出**：窗口全部关闭时，若 DSH 服务由本实例拉起，则一并退出
@@ -67,4 +68,5 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 | 标签页 | 注入顶部标签栏，切换 `data-dsh-ssh-active` / `data-dsh-taskboard-active` 激活属性；`!important` 规则强制隐藏对话内容，三界面严格互斥 |
 | 归档 | 调用 DSH 原生 API（`workspace.list` / `session.list` / `session.history`）只读查看；恢复由主进程「停服务 → 改 `workspace.json` → 重启服务 → 刷新窗口」完成 |
 | 交互兼容 | 全局拖拽排除 xterm 终端、SSH/看板面板、弹窗与 `[draggable]` 元素；控制条 z-index 35/36、归档面板 38，让位于插件弹窗（z-index 40） |
+| 移动端 | 控制条「移」按钮：主进程把服务重启为 `--host <局域网IP> --trusted-host <局域网IP>` 并显示访问地址；关闭恢复 `127.0.0.1`。打包内 `dsh-host-webserver` 的 host schema 已放宽以允许局域网 IP（官方默认仅 127.0.0.1/0.0.0.0，0.0.0.0 仍被启动逻辑禁止）。安全警告：开启期间同网段可无密码控制本机，用完即关 |
 | 崩溃恢复 | `render-process-gone` 自动重建窗口（1 分钟内超 3 次才放弃），日志写入 `frost-crash.log` |
