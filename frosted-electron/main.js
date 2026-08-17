@@ -538,6 +538,9 @@ const TAB_JS = `
     /* 切到 SSH / 看板时强制隐藏对话内容（不依赖插件自带规则，属性组合异常也生效） */
     'html[data-dsh-ssh-active]:not([data-dsh-taskboard-active]) [data-pane="conversation"] > :not([data-dsh-ssh-view]):not(#dsh-tabbar) { display: none !important; }',
     'html[data-dsh-taskboard-active]:not([data-dsh-ssh-active]) [data-pane="conversation"] > :not([data-dsh-taskboard-view]):not(#dsh-tabbar) { display: none !important; }',
+    /* 面板容器避开顶部标签栏：插件用 absolute inset:0 铺满列，会盖住标签栏区域，
+       导致看板头部工具栏（含"新建任务"按钮）被标签栏遮挡 */
+    'html[data-dsh-ssh-active]:not([data-dsh-taskboard-active]) [data-dsh-ssh-view], html[data-dsh-taskboard-active]:not([data-dsh-ssh-active]) [data-dsh-taskboard-view] { top: 46px !important; }',
     'body[data-ds-dark-theme] #dsh-tabbar { background: rgba(22,26,40,0.75); border-bottom-color: rgba(120,140,190,0.15); }',
     'body[data-ds-dark-theme] #dsh-tabbar button { color: #a8b8d8; }',
     'body[data-ds-dark-theme] #dsh-tabbar button.active { background: rgba(86,100,180,0.32); color: #dfe8ff; }'
