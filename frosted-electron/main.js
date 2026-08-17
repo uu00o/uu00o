@@ -276,6 +276,27 @@ html.frost-dark [class*="contentSeat"] {
 html.frost-dark body::before {
   background-color: rgba(18, 22, 32, var(--frost-alpha, 0.35));
 }
+/* 皮肤/独立背景层覆盖：皮肤（whale-song / blue-fantasy / dragon-heir / miku 等）
+   常用 body 背景或独立背景层画不透明图。body 级已被上面覆盖，这里兜底覆盖
+   独立背景层（fixed/absolute 全屏 div、artLayer、backdrop 等常见类名）。 */
+[data-skin-chrome="backdrop"],
+[class*="backdrop"], [class*="backDrop"], [class*="wallpaper"],
+[class*="artLayer"], [class*="art-"], [class*="hero"], [class*="scene"],
+[class*="bgLayer"], [class*="bg-layer"], [class*="backgroundLayer"],
+[class*="ocean"], [class*="sky"], [class*="gradient"] {
+  background-image: none !important;
+  background-color: rgba(255, 255, 255, var(--frost-alpha, 0.35)) !important;
+}
+html.frost-dark [data-skin-chrome="backdrop"],
+html.frost-dark [class*="backdrop"], html.frost-dark [class*="backDrop"],
+html.frost-dark [class*="wallpaper"], html.frost-dark [class*="artLayer"],
+html.frost-dark [class*="art-"], html.frost-dark [class*="hero"],
+html.frost-dark [class*="scene"], html.frost-dark [class*="bgLayer"],
+html.frost-dark [class*="bg-layer"], html.frost-dark [class*="backgroundLayer"],
+html.frost-dark [class*="ocean"], html.frost-dark [class*="sky"],
+html.frost-dark [class*="gradient"] {
+  background-color: rgba(15, 17, 21, var(--frost-alpha, 0.35)) !important;
+}
 `
 
 // 注入 JS：悬浮控制条（拖拽 + 透明度滑杆 + 最小化/关闭）
@@ -403,6 +424,37 @@ const FROST_JS = `
   // 初始精细透明一次；之后仅随滑杆调整执行
   applyTranslucent()
 
+  // 全屏背景层清理（皮肤/背景图兜底）：只处理 fixed/absolute 且覆盖大部分视口的元素
+  // （独立背景层、artLayer、backdrop div 等），低频 30s 运行，不做全页 getComputedStyle
+  // 风暴，避免重渲染/崩溃问题。
+  function clearFullscreenBackdrops () {
+    var vw = window.innerWidth
+    var vh = window.innerHeight
+    var all = document.querySelectorAll('body *')
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i]
+      if (el.id === 'frost-ctl' || el.id === 'frost-winctl') continue
+      var cs = getComputedStyle(el)
+      if (cs.position !== 'fixed' && cs.position !== 'absolute') continue
+      var r = el.getBoundingClientRect()
+      if (r.width < vw * 0.8 || r.height < vh * 0.8) continue
+      var b = cs.backgroundImage
+      if (b && b !== 'none') {
+        el.style.backgroundImage = 'none'
+        var dark = document.body ? document.body.hasAttribute('data-ds-dark-theme') : false
+        var rgb = dark ? '15, 17, 21' : '255, 255, 255'
+        var a = Number(root.style.getPropertyValue('--frost-alpha'))
+        if (!(a >= 0)) a = 0.35
+        el.style.backgroundColor = 'rgba(' + rgb + ',' + a + ')'
+      }
+    }
+  }
+  clearFullscreenBackdrops()
+  var backdropTimer = setInterval(function () {
+    if (!document.getElementById('frost-ctl')) { clearInterval(backdropTimer); return }
+    clearFullscreenBackdrops()
+  }, 30000)
+
   // 手动拖拽：按住控制条空白处移动窗口（透明窗口下系统拖拽常失效）
   var dragging = false
   bar.addEventListener('mousedown', function (e) {
@@ -491,16 +543,17 @@ function createWindow () {
 
   // 磨砂注入（幂等）。did-finish-load + 多次定时兜底：
   // 冷启动/慢机器上 SPA 可能数秒后才渲染完成，多次注入保证任何时机都生效。
-  // 重复注入时先移除上一份 CSS（removeInsertedCSS），避免样式表无限累积。
+  // insertCSS 返回 Promise<key>，必须 await 拿到真正的 key 才能 removeInsertedCSS，
+  // 否则旧样式表无法移除、会无限累积。
   let frostCssKey = null
-  function injectFrost () {
+  async function injectFrost () {
     if (win.isDestroyed()) return
     try {
       if (frostCssKey !== null) {
-        try { win.webContents.removeInsertedCSS(frostCssKey) } catch (e) { /* ignore */ }
+        try { await win.webContents.removeInsertedCSS(frostCssKey) } catch (e) { /* ignore */ }
         frostCssKey = null
       }
-      frostCssKey = win.webContents.insertCSS(FROST_CSS)
+      frostCssKey = await win.webContents.insertCSS(FROST_CSS)
       win.webContents.executeJavaScript(FROST_JS)
     } catch (err) {
       console.log('[frost-inject-err] ' + String(err))
