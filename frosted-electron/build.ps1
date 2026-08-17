@@ -58,6 +58,26 @@ if (Test-Path $vendorDshDir) { Remove-Item -Recurse -Force $vendorDshDir }
 robocopy $dshSrc $vendorDshDir /E /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -gt 7) { Write-Host 'ERROR: robocopy failed' -ForegroundColor Red; exit 1 }
 
+# --- 3.5 patch the bundled dsh-host-webserver host schema so --host <lan-ip> is accepted ---
+# DSH 0.1.0-rc.6 官方 schema 只允许 127.0.0.1 / 0.0.0.0；放宽为任意 host 字符串，
+# 使"移动端控制"（绑定局域网 IP）可用。0.0.0.0 仍由 launcher 启动逻辑拒绝。
+Write-Host '[3.5] patching bundled dsh-host-webserver host schema (allow LAN IP) ...'
+$schemaFile = Join-Path $vendorDshDir 'node_modules\@deepseek-ai\dsh-host-webserver\lib\index.js'
+$schemaOld = 'host: z.union([z.const("127.0.0.1"), z.const("0.0.0.0")]).required(),'
+$schemaNew = 'host: z.string().required(),'
+if (Test-Path $schemaFile) {
+  $schemaContent = Get-Content $schemaFile -Raw
+  if ($schemaContent.Contains($schemaOld)) {
+    $schemaContent = $schemaContent.Replace($schemaOld, $schemaNew)
+    [System.IO.File]::WriteAllText($schemaFile, $schemaContent)
+    Write-Host '  patched: host schema relaxed to accept concrete LAN IPs'
+  } else {
+    Write-Host '  SKIP: schema already patched or pattern changed' -ForegroundColor Yellow
+  }
+} else {
+  Write-Host '  WARN: schema file not found under vendor/dsh' -ForegroundColor Yellow
+}
+
 # --- 4. package the Electron app (asar disabled) ---
 Write-Host '[4/6] packaging with electron-packager (this downloads the Electron runtime on first run) ...'
 $packager = Join-Path $root 'node_modules\electron-packager\bin\electron-packager.js'
