@@ -515,6 +515,209 @@ const FROST_JS = `
 })()
 `
 
+// ============================================================================
+// 已归档对话查看面板：通过 DSH 原生 API（/api/workspace.list + session.list +
+// session.history）列出归档会话并只读查看对话内容。磨砂风格，与 FROST 一致。
+// ============================================================================
+const ARCHIVE_JS = `
+(function () {
+  if (document.getElementById('archive-btn')) return
+  var API_BASE = '/api'
+  function rpc (method, payload) {
+    return fetch(API_BASE + '/' + method, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'client-request', rpcId: (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()), method: method, payload: payload || {} })
+    }).then(function (r) { return r.json() }).then(function (env) {
+      if (env && env.result && env.result.ok) return env.result.value
+      throw new Error((env && env.result && env.result.error && env.result.error.message) || 'RPC failed: ' + method)
+    })
+  }
+  function el (tag, cls, text) {
+    var n = document.createElement(tag)
+    if (cls) n.className = cls
+    if (text !== undefined) n.textContent = text
+    return n
+  }
+  var css = [
+    '#archive-panel { position: fixed; right: 18px; top: 60px; width: 460px; max-width: calc(100vw - 40px); max-height: calc(100vh - 140px); display: none; flex-direction: column; z-index: 2147483003; border-radius: 16px; background: rgba(250,249,253,0.86); -webkit-backdrop-filter: blur(28px) saturate(180%); backdrop-filter: blur(28px) saturate(180%); border: 1px solid rgba(255,255,255,0.7); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 12px 40px rgba(20,30,60,0.18); overflow: hidden; font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; color: #2c3552; }',
+    '#archive-panel.archive-open { display: flex; }',
+    '#archive-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid rgba(60,70,110,0.12); font-weight: 600; flex: none; }',
+    '#archive-close { margin-left: auto; cursor: pointer; border: 0; background: transparent; color: #4a5578; font-size: 14px; padding: 2px 10px; border-radius: 8px; }',
+    '#archive-close:hover { background: rgba(224,49,49,0.85); color: #fff; }',
+    '#arch-back { cursor: pointer; border: 0; background: transparent; color: #4a5578; padding: 2px 10px; border-radius: 8px; font-size: 13px; }',
+    '#arch-back:hover { background: rgba(109,124,255,0.2); }',
+    '#archive-body { overflow: auto; padding: 8px; flex: 1; }',
+    '.arch-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; cursor: pointer; }',
+    '.arch-item:hover { background: rgba(109,124,255,0.12); }',
+    '.arch-item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+    '.arch-item .m { font-size: 11px; color: #7a86a8; flex: none; }',
+    '.arch-empty { text-align: center; color: #8b93a9; padding: 24px 0; }',
+    '.arch-msg { padding: 8px 12px; margin: 6px 0; border-radius: 12px; word-break: break-word; max-height: 340px; overflow: auto; }',
+    '.arch-msg.user { background: rgba(109,124,255,0.16); margin-left: 28px; }',
+    '.arch-msg.assistant { background: rgba(255,255,255,0.55); margin-right: 28px; }',
+    '.arch-msg .who { display: block; font-size: 11px; color: #7a86a8; margin-bottom: 4px; }',
+    '.arch-tool { font-size: 11px; color: #6d7cff; padding: 2px 0; }',
+    'body[data-ds-dark-theme] #archive-panel { background: rgba(24,28,42,0.88); color: #d8e2f5; border-color: rgba(120,140,190,0.25); }',
+    'body[data-ds-dark-theme] #archive-close, body[data-ds-dark-theme] #arch-back { color: #a8b8d8; }',
+    'body[data-ds-dark-theme] .arch-item .m, body[data-ds-dark-theme] .arch-msg .who, body[data-ds-dark-theme] .arch-empty { color: #7c89a8; }',
+    'body[data-ds-dark-theme] .arch-msg.assistant { background: rgba(44,52,76,0.6); }',
+    'body[data-ds-dark-theme] .arch-msg.user { background: rgba(86,100,180,0.28); }'
+  ].join('\\n')
+  var style = document.createElement('style')
+  style.textContent = css
+  document.head.appendChild(style)
+
+  // 按钮挂到磨砂控制条（❄ 图标左侧）
+  var ctl = document.getElementById('frost-ctl')
+  var btn = el('button', null, '📁')
+  btn.id = 'archive-btn'
+  btn.title = '已归档对话'
+  btn.style.cssText = 'border:0;background:transparent;color:#4a5578;font-size:13px;cursor:pointer;padding:2px 6px;border-radius:8px;line-height:1;'
+  btn.addEventListener('mouseenter', function () { btn.style.background = 'rgba(109,124,255,0.22)' })
+  btn.addEventListener('mouseleave', function () { btn.style.background = 'transparent' })
+  btn.addEventListener('mousedown', function (e) { e.stopPropagation() })
+  btn.addEventListener('click', function (e) { e.stopPropagation(); togglePanel() })
+  if (ctl) ctl.insertBefore(btn, ctl.firstChild)
+
+  // 面板
+  var panel = el('div')
+  panel.id = 'archive-panel'
+  var head = el('div')
+  head.id = 'archive-head'
+  var back = el('button', null, '← 返回')
+  back.id = 'arch-back'
+  back.style.display = 'none'
+  var title = el('span', null, '📁 已归档对话')
+  var close = el('button', null, '✕')
+  close.id = 'archive-close'
+  head.appendChild(back); head.appendChild(title); head.appendChild(close)
+  var body = el('div')
+  body.id = 'archive-body'
+  panel.appendChild(head); panel.appendChild(body)
+  document.body.appendChild(panel)
+
+  close.addEventListener('click', function () { panel.classList.remove('archive-open') })
+  back.addEventListener('click', function () { showList() })
+
+  function togglePanel () {
+    if (panel.classList.contains('archive-open')) { panel.classList.remove('archive-open'); return }
+    panel.classList.add('archive-open')
+    showList()
+  }
+  function fmtTime (ms) {
+    if (!ms) return ''
+    var d = new Date(ms)
+    var p = function (n) { return (n < 10 ? '0' : '') + n }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes())
+  }
+  function showList () {
+    back.style.display = 'none'
+    title.textContent = '📁 已归档对话'
+    body.innerHTML = ''
+    body.appendChild(el('div', 'arch-empty', '加载中…'))
+    rpc('workspace.list', {}).then(function (ws) {
+      var archived = ws.archivedSessionIds || []
+      if (archived.length === 0) {
+        body.innerHTML = ''
+        body.appendChild(el('div', 'arch-empty', '暂无已归档对话'))
+        return
+      }
+      return rpc('session.list', {}).then(function (sl) {
+        var byId = {}
+        ;(sl.items || []).forEach(function (s) { byId[s.sessionId] = s })
+        body.innerHTML = ''
+        archived.forEach(function (sid) {
+          var s = byId[sid]
+          var item = el('div', 'arch-item')
+          var t = el('span', 't', (s && s.projections && s.projections.values && s.projections.values.title) || sid)
+          var m = el('span', 'm', s ? fmtTime(s.updatedAt) : '')
+          var restore = el('button', null, '↩ 恢复')
+          restore.title = '恢复该会话并继续对话'
+          restore.style.cssText = 'border:1px solid rgba(109,124,255,0.4);background:rgba(109,124,255,0.12);color:#4a54c8;font-size:11px;cursor:pointer;padding:2px 8px;border-radius:8px;flex:none;'
+          restore.addEventListener('mouseenter', function () { restore.style.background = 'rgba(109,124,255,0.28)' })
+          restore.addEventListener('mouseleave', function () { restore.style.background = 'rgba(109,124,255,0.12)' })
+          restore.addEventListener('mousedown', function (e) { e.stopPropagation() })
+          restore.addEventListener('click', function (e) {
+            e.stopPropagation()
+            restoreSession(sid, restore)
+          })
+          item.appendChild(t); item.appendChild(m); item.appendChild(restore)
+          item.addEventListener('click', function () { showChat(sid) })
+          body.appendChild(item)
+        })
+      })
+    }).catch(function (err) {
+      body.innerHTML = ''
+      body.appendChild(el('div', 'arch-empty', '加载失败：' + err.message))
+    })
+  }
+  function restoreSession (sid, btn) {
+    if (!window.frostAPI || !window.frostAPI.restoreArchived) {
+      alert('当前环境不支持恢复归档会话')
+      return
+    }
+    var prev = btn.textContent
+    btn.textContent = '恢复中…'
+    btn.disabled = true
+    window.frostAPI.restoreArchived([sid]).then(function (res) {
+      if (res && res.ok) {
+        if (res.needRestart) {
+          alert(res.message || '已恢复；请重启 DSH 服务后生效')
+          btn.textContent = prev
+          btn.disabled = false
+        } else {
+          // 主进程已重启服务并刷新页面
+          btn.textContent = '✓ 已恢复'
+        }
+      } else {
+        alert('恢复失败：' + ((res && res.error) || '未知错误'))
+        btn.textContent = prev
+        btn.disabled = false
+      }
+    }).catch(function (err) {
+      alert('恢复失败：' + String(err && err.message || err))
+      btn.textContent = prev
+      btn.disabled = false
+    })
+  }
+  function showChat (sid) {
+    back.style.display = ''
+    title.textContent = '对话内容'
+    body.innerHTML = ''
+    body.appendChild(el('div', 'arch-empty', '加载中…'))
+    rpc('session.history', { sessionId: sid }).then(function (h) {
+      var evs = h.events || []
+      var msgs = evs.filter(function (e) {
+        return e.event && (e.event.type === 'user/message' || e.event.type === 'assistant/message')
+      }).sort(function (a, b) { return a.event.seq - b.event.seq })
+      body.innerHTML = ''
+      if (msgs.length === 0) { body.appendChild(el('div', 'arch-empty', '该会话暂无消息')); return }
+      msgs.forEach(function (m) {
+        var ev = m.event
+        var data = ev.data
+        var content = (ev.type === 'assistant/message') ? (data.message && data.message.content) : data.content
+        var wrap = el('div', 'arch-msg ' + (ev.type === 'user/message' ? 'user' : 'assistant'))
+        wrap.appendChild(el('span', 'who', ev.type === 'user/message' ? '你' : 'AI'))
+        ;(content || []).forEach(function (block) {
+          if (block.type === 'text' && block.text) {
+            wrap.appendChild(el('div', null, block.text))
+          } else if (block.type === 'reasoning' && block.text) {
+            wrap.appendChild(el('div', 'arch-tool', '💭 ' + String(block.text).slice(0, 200)))
+          } else if (block.type === 'tool-call' && block.name) {
+            wrap.appendChild(el('div', 'arch-tool', '🔧 ' + block.name))
+          }
+        })
+        body.appendChild(wrap)
+      })
+    }).catch(function (err) {
+      body.innerHTML = ''
+      body.appendChild(el('div', 'arch-empty', '加载失败：' + err.message))
+    })
+  }
+})()
+`
+
 function createWindow () {
   const material = windowsFrostMaterial()
   const win = new BrowserWindow({
@@ -555,6 +758,7 @@ function createWindow () {
       }
       frostCssKey = await win.webContents.insertCSS(FROST_CSS)
       win.webContents.executeJavaScript(FROST_JS)
+      win.webContents.executeJavaScript(ARCHIVE_JS)
     } catch (err) {
       console.log('[frost-inject-err] ' + String(err))
     }
@@ -666,6 +870,90 @@ ipcMain.on('frost:drag-end', () => {
   if (dragTimer) {
     clearInterval(dragTimer)
     dragTimer = null
+  }
+})
+
+// ============================================================================
+// 恢复归档会话：DSH 没有"取消归档"API，这里由主进程
+//   停服务 → 改 workspace.json（从 archivedSessionIds 移除）→ 重启服务 → 刷新窗口
+// 服务重启后会话回到活跃列表，即可继续对话。
+// ============================================================================
+function dshHomePath () {
+  return process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
+}
+
+function workspaceStorageFile () {
+  return path.join(dshHomePath(), 'storages', 'workspace.json')
+}
+
+// 停止由本实例拉起的服务，并等待端口释放
+async function stopOwnedService () {
+  if (serviceProc) {
+    const p = serviceProc
+    serviceProc = null
+    try { p.kill() } catch (e) { /* ignore */ }
+    await new Promise((resolve) => {
+      if (p.exitCode !== null || p.signalCode !== null) return resolve()
+      const t = setTimeout(resolve, 8000)
+      p.once('exit', () => { clearTimeout(t); resolve() })
+    })
+  }
+  for (let i = 0; i < 20; i++) {
+    if (!(await checkPort(PORT))) return true
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  return true
+}
+
+// 重启 DSH 服务（恢复归档后需要服务重载 workspace 域）
+async function restartService () {
+  const wasOurs = serviceStartedByUs
+  await stopOwnedService()
+  serviceStartedByUs = false
+  const r = startDshService()
+  if (!r.ok) return r
+  const up = await waitForService(60 * 1000)
+  if (!up) return { ok: false, error: 'DSH 服务重启超时' }
+  serviceStartedByUs = wasOurs
+  return { ok: true }
+}
+
+ipcMain.handle('frost:restore-archived', async (e, sessionIds) => {
+  const ids = Array.isArray(sessionIds) ? sessionIds.filter((x) => typeof x === 'string') : []
+  if (ids.length === 0) return { ok: false, error: '缺少会话 ID' }
+  try {
+    const file = workspaceStorageFile()
+    if (!fs.existsSync(file)) return { ok: false, error: '找不到 workspace 存储：' + file }
+    const doc = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const archived = (doc.global && Array.isArray(doc.global.archivedSessionIds)) ? doc.global.archivedSessionIds : []
+    const removed = archived.filter((id) => !ids.includes(id))
+    const changed = removed.length !== archived.length
+    if (!changed) return { ok: true, changed: false, message: '会话本就不在归档列表' }
+
+    if (!serviceStartedByUs) {
+      // 服务不是本实例拉起的（外部管理）：只改文件，由外部重启生效
+      doc.global.archivedSessionIds = removed
+      const tmp = file + '.tmp'
+      fs.writeFileSync(tmp, JSON.stringify(doc, null, 2), 'utf8')
+      fs.renameSync(tmp, file)
+      return { ok: true, changed: true, needRestart: true, message: '已修改归档状态；DSH 服务由外部管理，请重启服务后生效' }
+    }
+
+    // 停服务（防止运行中的服务把旧状态写回覆盖）→ 改文件 → 重启服务
+    await stopOwnedService()
+    doc.global.archivedSessionIds = removed
+    const tmp = file + '.tmp'
+    fs.writeFileSync(tmp, JSON.stringify(doc, null, 2), 'utf8')
+    fs.renameSync(tmp, file)
+    logFrost('[restore] unarchived ' + ids.join(', ') + ' via ' + file)
+    const r = await restartService()
+    if (!r.ok) return r
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win && !win.isDestroyed()) win.webContents.reload()
+    return { ok: true, changed: true, restored: ids }
+  } catch (err) {
+    logFrost('[restore-archived-err] ' + String((err && err.stack) || err))
+    return { ok: false, error: String((err && err.message) || err) }
   }
 })
 
