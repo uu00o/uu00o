@@ -306,7 +306,7 @@ const FROST_JS = `
   var root = document.documentElement
   var css = [
     '#frost-ctl {',
-    '  position: fixed; right: 18px; bottom: 18px; z-index: 2147483001;',
+    '  position: fixed; right: 18px; bottom: 18px; z-index: 35;',
     '  display: flex; align-items: center; gap: 8px;',
     '  padding: 7px 14px; border-radius: 999px;',
     '  background: rgba(250, 249, 253, 0.55);',
@@ -325,7 +325,7 @@ const FROST_JS = `
     '#frost-ctl input[type=range] { width: 90px; accent-color: #6d7cff; cursor: pointer; }',
     '#frost-ctl .frost-val { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: #4a5578; }',
     '#frost-winctl {',
-    '  position: fixed; top: 10px; right: 10px; z-index: 2147483002;',
+    '  position: fixed; top: 10px; right: 10px; z-index: 36;',
     '  display: flex; align-items: center; gap: 6px;',
     '  padding: 4px; border-radius: 12px;',
     '  background: rgba(250, 249, 253, 0.5);',
@@ -475,7 +475,7 @@ const FROST_JS = `
 
   // 全局拖拽：按住页面任意非交互区域拖动窗口（移动超过 5px 阈值才触发，避免单击误触）
   var gDrag = { active: false, started: false, x: 0, y: 0 }
-  var IGNORE_SEL = 'button, input, textarea, select, a, label, iframe, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="switch"], [contenteditable="true"], #frost-ctl, #frost-winctl'
+  var IGNORE_SEL = 'button, input, textarea, select, a, label, iframe, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="switch"], [contenteditable="true"], [draggable="true"], [role="dialog"], [class*="modal"], [class*="dialog"], .xterm, .xterm-screen, [class*="xterm"], [data-dsh-ssh-view], [data-dsh-taskboard-view], [data-dsh-taskboard-board], #dsh-tabbar, #frost-ctl, #frost-winctl'
   document.addEventListener('mousedown', function (e) {
     if (e.button !== 0) return
     if (e.target.closest && e.target.closest(IGNORE_SEL)) return
@@ -516,6 +516,97 @@ const FROST_JS = `
 `
 
 // ============================================================================
+// 顶部标签栏：对话 / SSH / 任务看板 三态切换。
+// SSH 面板与任务看板靠 html 属性（data-dsh-ssh-active / data-dsh-taskboard-active）
+// 互斥显隐，属性状态一旦混乱（两个激活属性共存）插件规则即失效，面板
+// （position:absolute 铺满）与对话叠在一起。这里用明确的三态切换根治：
+//   对话  = 移除两个激活属性
+//   SSH   = 设 ssh-active，移除 taskboard-active
+//   看板  = 设 taskboard-active，移除 ssh-active
+// 标签栏用 !important 覆盖插件 CSS，确保任何状态下都可见。
+// ============================================================================
+const TAB_JS = `
+(function () {
+  if (document.getElementById('dsh-tabbar')) return
+  var root = document.documentElement
+  var css = [
+    '#dsh-tabbar { position: relative !important; inset: auto !important; z-index: 34 !important; display: flex !important; align-items: center; gap: 6px; padding: 8px 16px; margin: 0 !important; background: rgba(250,249,253,0.72); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); border-bottom: 1px solid rgba(60,70,110,0.12); flex: none; }',
+    '#dsh-tabbar button { border: 0; background: transparent; color: #4a5578; font: 12px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 4px 16px; border-radius: 999px; cursor: pointer; }',
+    '#dsh-tabbar button:hover { background: rgba(109,124,255,0.14); }',
+    '#dsh-tabbar button.active { background: rgba(109,124,255,0.24); color: #4a54c8; font-weight: 600; }',
+    /* 切到 SSH / 看板时强制隐藏对话内容（不依赖插件自带规则，属性组合异常也生效） */
+    'html[data-dsh-ssh-active]:not([data-dsh-taskboard-active]) [data-pane="conversation"] > :not([data-dsh-ssh-view]):not(#dsh-tabbar) { display: none !important; }',
+    'html[data-dsh-taskboard-active]:not([data-dsh-ssh-active]) [data-pane="conversation"] > :not([data-dsh-taskboard-view]):not(#dsh-tabbar) { display: none !important; }',
+    'body[data-ds-dark-theme] #dsh-tabbar { background: rgba(22,26,40,0.75); border-bottom-color: rgba(120,140,190,0.15); }',
+    'body[data-ds-dark-theme] #dsh-tabbar button { color: #a8b8d8; }',
+    'body[data-ds-dark-theme] #dsh-tabbar button.active { background: rgba(86,100,180,0.32); color: #dfe8ff; }'
+  ].join('\\n')
+  var style = document.createElement('style')
+  style.textContent = css
+  document.head.appendChild(style)
+
+  function sync () {
+    var bar = document.getElementById('dsh-tabbar')
+    if (!bar) return
+    var ssh = root.hasAttribute('data-dsh-ssh-active')
+    var board = root.hasAttribute('data-dsh-taskboard-active')
+    var active = board ? 'board' : (ssh ? 'ssh' : 'chat')
+    var btns = bar.querySelectorAll('button')
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('active', btns[i].dataset.tab === active)
+    }
+  }
+  function switchTo (tab) {
+    if (tab === 'chat') {
+      root.removeAttribute('data-dsh-ssh-active')
+      root.removeAttribute('data-dsh-taskboard-active')
+    } else if (tab === 'ssh') {
+      root.setAttribute('data-dsh-ssh-active', '')
+      root.removeAttribute('data-dsh-taskboard-active')
+    } else if (tab === 'board') {
+      root.setAttribute('data-dsh-taskboard-active', '')
+      root.removeAttribute('data-dsh-ssh-active')
+    }
+    sync()
+  }
+  function build () {
+    if (document.getElementById('dsh-tabbar')) return true
+    var column = document.querySelector('[data-pane="conversation"]')
+    if (!column) return false
+    var bar = document.createElement('div')
+    bar.id = 'dsh-tabbar'
+    var mk = function (tab, label) {
+      var b = document.createElement('button')
+      b.type = 'button'
+      b.dataset.tab = tab
+      b.textContent = label
+      b.addEventListener('click', function () { switchTo(tab) })
+      return b
+    }
+    bar.appendChild(mk('chat', '对话'))
+    bar.appendChild(mk('ssh', 'SSH'))
+    bar.appendChild(mk('board', '任务看板'))
+    column.insertBefore(bar, column.firstChild)
+    sync()
+    return true
+  }
+  var built = build()
+  if (!built) {
+    var obs = new MutationObserver(function () {
+      if (build()) obs.disconnect()
+    })
+    obs.observe(document.body, { childList: true, subtree: true })
+  }
+  // 同步外部激活（侧边栏入口点击 / 插件自身打开）
+  try {
+    new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ['data-dsh-ssh-active', 'data-dsh-taskboard-active'] })
+  } catch (e) { /* ignore */ }
+  document.addEventListener('dsh-panel-activate', sync)
+  window.addEventListener('dsh-panel-activate', sync)
+})()
+`
+
+// ============================================================================
 // 已归档对话查看面板：通过 DSH 原生 API（/api/workspace.list + session.list +
 // session.history）列出归档会话并只读查看对话内容。磨砂风格，与 FROST 一致。
 // ============================================================================
@@ -540,7 +631,7 @@ const ARCHIVE_JS = `
     return n
   }
   var css = [
-    '#archive-panel { position: fixed; right: 18px; top: 60px; width: 460px; max-width: calc(100vw - 40px); max-height: calc(100vh - 140px); display: none; flex-direction: column; z-index: 2147483003; border-radius: 16px; background: rgba(250,249,253,0.86); -webkit-backdrop-filter: blur(28px) saturate(180%); backdrop-filter: blur(28px) saturate(180%); border: 1px solid rgba(255,255,255,0.7); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 12px 40px rgba(20,30,60,0.18); overflow: hidden; font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; color: #2c3552; }',
+    '#archive-panel { position: fixed; right: 18px; top: 60px; width: 460px; max-width: calc(100vw - 40px); max-height: calc(100vh - 140px); display: none; flex-direction: column; z-index: 38; border-radius: 16px; background: rgba(250,249,253,0.86); -webkit-backdrop-filter: blur(28px) saturate(180%); backdrop-filter: blur(28px) saturate(180%); border: 1px solid rgba(255,255,255,0.7); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 12px 40px rgba(20,30,60,0.18); overflow: hidden; font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; color: #2c3552; }',
     '#archive-panel.archive-open { display: flex; }',
     '#archive-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid rgba(60,70,110,0.12); font-weight: 600; flex: none; }',
     '#archive-close { margin-left: auto; cursor: pointer; border: 0; background: transparent; color: #4a5578; font-size: 14px; padding: 2px 10px; border-radius: 8px; }',
@@ -758,6 +849,7 @@ function createWindow () {
       }
       frostCssKey = await win.webContents.insertCSS(FROST_CSS)
       win.webContents.executeJavaScript(FROST_JS)
+      win.webContents.executeJavaScript(TAB_JS)
       win.webContents.executeJavaScript(ARCHIVE_JS)
     } catch (err) {
       console.log('[frost-inject-err] ' + String(err))

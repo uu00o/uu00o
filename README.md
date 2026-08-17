@@ -9,6 +9,9 @@
   - Windows 11（开启系统"透明效果"）自动使用系统级 **Acrylic 材质**，真正模糊桌面
   - Windows 10 / 未开启系统透明时回退透明窗口方案，任何版本都能透出桌面
 - **深色模式适配**：磨砂层实时跟随 DSH 深浅主题切换，深色模式下为深色玻璃
+- **标签页切换**：窗口顶部标签栏在「对话 / SSH / 任务看板」间一键切换，三个界面互斥显示、不叠加（SSH 与任务看板由 dsh-web-ui 全家桶插件提供）
+- **归档对话**：控制条的归档按钮列出已归档会话，可只读查看对话内容；「恢复」按钮将会话移出归档并自动重启服务，回到活跃列表即可继续对话
+- **交互兼容**：全局窗口拖拽自动排除 SSH 终端（xterm）文本选择、面板与弹窗操作、原生拖拽元素；磨砂控制条层级让位于插件弹窗，不再遮挡
 - **自包含分发**：构建产物内置 `node.exe` 与完整的 `@deepseek-ai/dsh`（含全部依赖），开箱即用，无需安装 node 或 dsh
 - **稳定运行**：无 2 秒全页轮询（避免重渲染风暴）；渲染进程崩溃自动重建窗口，不闪退；崩溃原因记录到 `%LOCALAPPDATA%\DSHFrostedGlass\frost-crash.log`
 - **智能退出**：窗口全部关闭时，若 DSH 服务由本实例拉起，则一并退出
@@ -61,4 +64,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 | 磨砂注入 | `insertCSS` + `executeJavaScript` 幂等注入（重复注入先移除旧样式），含多次兜底重注入 |
 | 透明度 | CSS 变量 `--frost-alpha`（1=实心，0.15=最透明），所有覆盖层直接引用，显示值与实际严格一致 |
 | 主题 | 监听 `body[data-ds-dark-theme]` 镜像到 `html.frost-dark`，深浅主题分别使用白/深色玻璃 |
+| 标签页 | 注入顶部标签栏，切换 `data-dsh-ssh-active` / `data-dsh-taskboard-active` 激活属性；`!important` 规则强制隐藏对话内容，三界面严格互斥 |
+| 归档 | 调用 DSH 原生 API（`workspace.list` / `session.list` / `session.history`）只读查看；恢复由主进程「停服务 → 改 `workspace.json` → 重启服务 → 刷新窗口」完成 |
+| 交互兼容 | 全局拖拽排除 xterm 终端、SSH/看板面板、弹窗与 `[draggable]` 元素；控制条 z-index 35/36、归档面板 38，让位于插件弹窗（z-index 40） |
 | 崩溃恢复 | `render-process-gone` 自动重建窗口（1 分钟内超 3 次才放弃），日志写入 `frost-crash.log` |
