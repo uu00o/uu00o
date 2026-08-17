@@ -86,7 +86,7 @@ function checkPort (port, timeoutMs = 3000) {
 }
 
 // 后台拉起 DSH 服务，日志写入 %LOCALAPPDATA%\DSHFrostedGlass\dsh-service.log
-function startDshService () {
+function startDshService (extraArgs) {
   const node = findNode()
   const cli = findDshCli()
   if (!cli) {
@@ -101,6 +101,7 @@ function startDshService () {
     fs.writeSync(logFd, `[diag] bundledCli=${BUNDLED_DSH_CLI} exists=${fs.existsSync(BUNDLED_DSH_CLI)}\n`)
     const cliArgs = [cli, '--profile', DSH_PROFILE]
     if (process.env.DSH_PORT) cliArgs.push('--port', String(PORT))
+    if (Array.isArray(extraArgs)) cliArgs.push(...extraArgs)
     serviceProc = spawn(node, cliArgs, {
       cwd: pickServiceCwd(),
       windowsHide: true,                       // 不弹黑色命令行窗口
@@ -196,6 +197,10 @@ const FROST_CSS = `
 html, body {
   background: rgba(250,247,240, var(--frost-alpha, 0.35)) !important;
 }
+/* 顶部标题框让位：页面内容整体下移 39px（标题框高 38 + 1px 边框），避免被遮挡 */
+body {
+  padding-top: 39px !important;
+}
 :root {
   --dsw-alias-bg-base: rgba(255,255,255,var(--frost-alpha, 0.35)) !important;
   --dsw-alias-bg-layer-1: rgba(255,255,255,var(--frost-alpha, 0.35)) !important;
@@ -276,77 +281,78 @@ html.frost-dark [class*="contentSeat"] {
 html.frost-dark body::before {
   background-color: rgba(18, 22, 32, var(--frost-alpha, 0.35));
 }
+/* 皮肤/独立背景层覆盖：皮肤（whale-song / blue-fantasy / dragon-heir / miku 等）
+   常用 body 背景或独立背景层画不透明图。body 级已被上面覆盖，这里兜底覆盖
+   独立背景层（fixed/absolute 全屏 div、artLayer、backdrop 等常见类名）。 */
+[data-skin-chrome="backdrop"],
+[class*="backdrop"], [class*="backDrop"], [class*="wallpaper"],
+[class*="artLayer"], [class*="art-"], [class*="hero"], [class*="scene"],
+[class*="bgLayer"], [class*="bg-layer"], [class*="backgroundLayer"],
+[class*="ocean"], [class*="sky"], [class*="gradient"] {
+  background-image: none !important;
+  background-color: rgba(255, 255, 255, var(--frost-alpha, 0.35)) !important;
+}
+html.frost-dark [data-skin-chrome="backdrop"],
+html.frost-dark [class*="backdrop"], html.frost-dark [class*="backDrop"],
+html.frost-dark [class*="wallpaper"], html.frost-dark [class*="artLayer"],
+html.frost-dark [class*="art-"], html.frost-dark [class*="hero"],
+html.frost-dark [class*="scene"], html.frost-dark [class*="bgLayer"],
+html.frost-dark [class*="bg-layer"], html.frost-dark [class*="backgroundLayer"],
+html.frost-dark [class*="ocean"], html.frost-dark [class*="sky"],
+html.frost-dark [class*="gradient"] {
+  background-color: rgba(15, 17, 21, var(--frost-alpha, 0.35)) !important;
+}
 `
 
 // 注入 JS：悬浮控制条（拖拽 + 透明度滑杆 + 最小化/关闭）
 const FROST_JS = `
 (function () {
-  if (document.getElementById('frost-ctl')) return
+  if (document.getElementById('frost-titlebar')) return
   var root = document.documentElement
   var css = [
-    '#frost-ctl {',
-    '  position: fixed; right: 18px; bottom: 18px; z-index: 2147483001;',
-    '  display: flex; align-items: center; gap: 8px;',
-    '  padding: 7px 14px; border-radius: 999px;',
-    '  background: rgba(250, 249, 253, 0.55);',
-    '  -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(1.08);',
-    '  backdrop-filter: blur(28px) saturate(180%) brightness(1.08);',
-    '  border: 1px solid rgba(255,255,255,0.65);',
-    '  box-shadow:',
-    '    inset 0 1px 0 rgba(255,255,255,0.7),',
-    '    0 8px 28px rgba(20,30,60,0.14),',
-    '    0 2px 6px rgba(20,30,60,0.08);',
+    '#frost-titlebar {',
+    '  position: fixed; top: 0; left: 0; right: 0; height: 38px; z-index: 39;',
+    '  display: flex; align-items: center; gap: 8px; padding: 0 12px;',
+    '  background: rgba(250, 249, 253, 0.6);',
+    '  -webkit-backdrop-filter: blur(24px) saturate(170%) brightness(1.06);',
+    '  backdrop-filter: blur(24px) saturate(170%) brightness(1.06);',
+    '  border-bottom: 1px solid rgba(255,255,255,0.5);',
+    '  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 12px rgba(20,30,60,0.08);',
     '  font: 12px/1 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;',
     '  color: #3a4466; user-select: none; cursor: default;',
     '}',
-    '#frost-ctl .frost-ico { font-size: 13px; }',
-    '#frost-ctl label { display: flex; align-items: center; gap: 4px; color: #4a5578; }',
-    '#frost-ctl input[type=range] { width: 90px; accent-color: #6d7cff; cursor: pointer; }',
-    '#frost-ctl .frost-val { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: #4a5578; }',
-    '#frost-winctl {',
-    '  position: fixed; top: 10px; right: 10px; z-index: 2147483002;',
-    '  display: flex; align-items: center; gap: 6px;',
-    '  padding: 4px; border-radius: 12px;',
-    '  background: rgba(250, 249, 253, 0.5);',
-    '  -webkit-backdrop-filter: blur(24px) saturate(170%) brightness(1.06);',
-    '  backdrop-filter: blur(24px) saturate(170%) brightness(1.06);',
-    '  border: 1px solid rgba(255,255,255,0.6);',
-    '  box-shadow:',
-    '    inset 0 1px 0 rgba(255,255,255,0.65),',
-    '    0 4px 16px rgba(20,30,60,0.12);',
-    '}',
-    '#frost-winctl .frost-btn {',
-    '  width: 30px; height: 26px; border-radius: 9px; border: 0;',
+    '#frost-titlebar .frost-title { font-weight: 600; color: #4a54c8; margin-right: auto; padding-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+    '#frost-titlebar label { display: flex; align-items: center; gap: 4px; color: #4a5578; flex: none; }',
+    '#frost-titlebar input[type=range] { width: 80px; accent-color: #6d7cff; cursor: pointer; }',
+    '#frost-titlebar .frost-val { min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; color: #4a5578; flex: none; }',
+    '#frost-titlebar .frost-btn {',
+    '  width: 28px; height: 26px; border-radius: 8px; border: 0;',
     '  background: transparent; color: #4a5578;',
-    '  font-size: 13px; line-height: 1; cursor: pointer;',
+    '  font-size: 13px; line-height: 1; cursor: pointer; flex: none;',
     '  display: inline-flex; align-items: center; justify-content: center;',
     '  transition: background 0.15s ease;',
     '}',
-    '#frost-winctl .frost-btn:hover { background: rgba(109,124,255,0.22); color: #4a54c8; }',
-    '#frost-winctl .frost-btn.frost-close:hover { background: rgba(224,49,49,0.85); color: #fff; }'
+    '#frost-titlebar .frost-btn:hover { background: rgba(109,124,255,0.22); color: #4a54c8; }',
+    '#frost-titlebar .frost-close:hover { background: rgba(224,49,49,0.85); color: #fff; }',
+    'body[data-ds-dark-theme] #frost-titlebar { background: rgba(22,26,40,0.75); border-bottom-color: rgba(120,140,190,0.15); }',
+    'body[data-ds-dark-theme] #frost-titlebar .frost-title { color: #dfe8ff; }',
+    'body[data-ds-dark-theme] #frost-titlebar label, body[data-ds-dark-theme] #frost-titlebar .frost-val, body[data-ds-dark-theme] #frost-titlebar .frost-btn { color: #a8b8d8; }'
   ].join('\\n')
   var style = document.createElement('style')
   style.textContent = css
   document.head.appendChild(style)
 
-  // 右下角：磨砂控制条（❄ + 透明度滑杆，按住可拖动窗口）
+  // 顶部标题框：标题 + 透明度滑杆 + 最小化/关闭（归档、移动端按钮由各自注入脚本插入）
   var bar = document.createElement('div')
-  bar.id = 'frost-ctl'
+  bar.id = 'frost-titlebar'
   bar.innerHTML = [
-    '<span class="frost-ico">❄</span>',
+    '<span class="frost-title">DSH 磨砂玻璃</span>',
     '<label>透明<input type="range" id="frost-alpha" min="0" max="100" value="65"></label>',
-    '<span class="frost-val" id="frost-val">65%</span>'
-  ].join('')
-  document.body.appendChild(bar)
-
-  // 右上角：窗口控制按钮（最小化 / 关闭）
-  var winctl = document.createElement('div')
-  winctl.id = 'frost-winctl'
-  winctl.innerHTML = [
+    '<span class="frost-val" id="frost-val">65%</span>',
     '<button class="frost-btn" id="frost-min" title="最小化">─</button>',
     '<button class="frost-btn frost-close" id="frost-close" title="关闭">✕</button>'
   ].join('')
-  document.body.appendChild(winctl)
+  document.body.appendChild(bar)
 
   var alpha = document.getElementById('frost-alpha')
   var val = document.getElementById('frost-val')
@@ -373,7 +379,7 @@ const FROST_JS = `
     new MutationObserver(function () { syncDark() }).observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
   } catch (e) { /* older engines */ }
   var darkTimer = setInterval(function () {
-    if (!document.getElementById('frost-ctl')) { clearInterval(darkTimer); return }
+    if (!document.getElementById('frost-titlebar')) { clearInterval(darkTimer); return }
     syncDark()
   }, 3000)
 
@@ -387,7 +393,7 @@ const FROST_JS = `
     var all = document.querySelectorAll('*')
     for (var i = 0; i < all.length; i++) {
       var el = all[i]
-      if (el.id === 'frost-ctl' || el.id === 'frost-winctl' || el === document.body || el === document.documentElement) continue
+      if (el.id === 'frost-titlebar' || el === document.body || el === document.documentElement) continue
       var bg = getComputedStyle(el).backgroundColor
       var m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/)
       if (m) {
@@ -403,10 +409,41 @@ const FROST_JS = `
   // 初始精细透明一次；之后仅随滑杆调整执行
   applyTranslucent()
 
-  // 手动拖拽：按住控制条空白处移动窗口（透明窗口下系统拖拽常失效）
+  // 全屏背景层清理（皮肤/背景图兜底）：只处理 fixed/absolute 且覆盖大部分视口的元素
+  // （独立背景层、artLayer、backdrop div 等），低频 30s 运行，不做全页 getComputedStyle
+  // 风暴，避免重渲染/崩溃问题。
+  function clearFullscreenBackdrops () {
+    var vw = window.innerWidth
+    var vh = window.innerHeight
+    var all = document.querySelectorAll('body *')
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i]
+      if (el.id === 'frost-titlebar') continue
+      var cs = getComputedStyle(el)
+      if (cs.position !== 'fixed' && cs.position !== 'absolute') continue
+      var r = el.getBoundingClientRect()
+      if (r.width < vw * 0.8 || r.height < vh * 0.8) continue
+      var b = cs.backgroundImage
+      if (b && b !== 'none') {
+        el.style.backgroundImage = 'none'
+        var dark = document.body ? document.body.hasAttribute('data-ds-dark-theme') : false
+        var rgb = dark ? '15, 17, 21' : '255, 255, 255'
+        var a = Number(root.style.getPropertyValue('--frost-alpha'))
+        if (!(a >= 0)) a = 0.35
+        el.style.backgroundColor = 'rgba(' + rgb + ',' + a + ')'
+      }
+    }
+  }
+  clearFullscreenBackdrops()
+  var backdropTimer = setInterval(function () {
+    if (!document.getElementById('frost-titlebar')) { clearInterval(backdropTimer); return }
+    clearFullscreenBackdrops()
+  }, 30000)
+
+  // 手动拖拽：按住标题框空白处（非控件）移动窗口（透明窗口下系统拖拽常失效）
   var dragging = false
   bar.addEventListener('mousedown', function (e) {
-    if (e.target.closest('button, input')) return
+    if (e.target.closest('button, input, label, select, a')) return
     dragging = true
     if (window.frostAPI) window.frostAPI.dragStart({
       x: e.screenX - window.screenX,
@@ -423,7 +460,7 @@ const FROST_JS = `
 
   // 全局拖拽：按住页面任意非交互区域拖动窗口（移动超过 5px 阈值才触发，避免单击误触）
   var gDrag = { active: false, started: false, x: 0, y: 0 }
-  var IGNORE_SEL = 'button, input, textarea, select, a, label, iframe, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="switch"], [contenteditable="true"], #frost-ctl, #frost-winctl'
+  var IGNORE_SEL = 'button, input, textarea, select, a, label, iframe, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="switch"], [contenteditable="true"], [draggable="true"], [role="dialog"], [class*="modal"], [class*="dialog"], .xterm, .xterm-screen, [class*="xterm"], [data-dsh-ssh-view], [data-dsh-taskboard-view], [data-dsh-taskboard-board], #dsh-tabbar, #frost-titlebar'
   document.addEventListener('mousedown', function (e) {
     if (e.button !== 0) return
     if (e.target.closest && e.target.closest(IGNORE_SEL)) return
@@ -463,6 +500,357 @@ const FROST_JS = `
 })()
 `
 
+// ============================================================================
+// 顶部标签栏：对话 / SSH / 任务看板 三态切换。
+// SSH 面板与任务看板靠 html 属性（data-dsh-ssh-active / data-dsh-taskboard-active）
+// 互斥显隐，属性状态一旦混乱（两个激活属性共存）插件规则即失效，面板
+// （position:absolute 铺满）与对话叠在一起。这里用明确的三态切换根治：
+//   对话  = 移除两个激活属性
+//   SSH   = 设 ssh-active，移除 taskboard-active
+//   看板  = 设 taskboard-active，移除 ssh-active
+// 标签栏用 !important 覆盖插件 CSS，确保任何状态下都可见。
+// ============================================================================
+const TAB_JS = `
+(function () {
+  if (document.getElementById('dsh-tabbar')) return
+  var root = document.documentElement
+  var css = [
+    '#dsh-tabbar { position: relative !important; inset: auto !important; z-index: 34 !important; display: flex !important; align-items: center; gap: 6px; padding: 8px 16px; margin: 0 !important; background: rgba(250,249,253,0.72); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); border-bottom: 1px solid rgba(60,70,110,0.12); flex: none; }',
+    '#dsh-tabbar button { border: 0; background: transparent; color: #4a5578; font: 12px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 4px 16px; border-radius: 999px; cursor: pointer; }',
+    '#dsh-tabbar button:hover { background: rgba(109,124,255,0.14); }',
+    '#dsh-tabbar button.active { background: rgba(109,124,255,0.24); color: #4a54c8; font-weight: 600; }',
+    /* 切到 SSH / 看板时强制隐藏对话内容（不依赖插件自带规则，属性组合异常也生效） */
+    'html[data-dsh-ssh-active]:not([data-dsh-taskboard-active]) [data-pane="conversation"] > :not([data-dsh-ssh-view]):not(#dsh-tabbar) { display: none !important; }',
+    'html[data-dsh-taskboard-active]:not([data-dsh-ssh-active]) [data-pane="conversation"] > :not([data-dsh-taskboard-view]):not(#dsh-tabbar) { display: none !important; }',
+    /* 面板容器避开顶部标签栏：插件用 absolute inset:0 铺满列，会盖住标签栏区域，
+       导致看板头部工具栏（含"新建任务"按钮）被标签栏遮挡 */
+    'html[data-dsh-ssh-active]:not([data-dsh-taskboard-active]) [data-dsh-ssh-view], html[data-dsh-taskboard-active]:not([data-dsh-ssh-active]) [data-dsh-taskboard-view] { top: 46px !important; }',
+    'body[data-ds-dark-theme] #dsh-tabbar { background: rgba(22,26,40,0.75); border-bottom-color: rgba(120,140,190,0.15); }',
+    'body[data-ds-dark-theme] #dsh-tabbar button { color: #a8b8d8; }',
+    'body[data-ds-dark-theme] #dsh-tabbar button.active { background: rgba(86,100,180,0.32); color: #dfe8ff; }'
+  ].join('\\n')
+  var style = document.createElement('style')
+  style.textContent = css
+  document.head.appendChild(style)
+
+  function sync () {
+    var bar = document.getElementById('dsh-tabbar')
+    if (!bar) return
+    var ssh = root.hasAttribute('data-dsh-ssh-active')
+    var board = root.hasAttribute('data-dsh-taskboard-active')
+    var active = board ? 'board' : (ssh ? 'ssh' : 'chat')
+    var btns = bar.querySelectorAll('button')
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('active', btns[i].dataset.tab === active)
+    }
+  }
+  function switchTo (tab) {
+    if (tab === 'chat') {
+      root.removeAttribute('data-dsh-ssh-active')
+      root.removeAttribute('data-dsh-taskboard-active')
+    } else if (tab === 'ssh') {
+      root.setAttribute('data-dsh-ssh-active', '')
+      root.removeAttribute('data-dsh-taskboard-active')
+    } else if (tab === 'board') {
+      root.setAttribute('data-dsh-taskboard-active', '')
+      root.removeAttribute('data-dsh-ssh-active')
+    }
+    sync()
+  }
+  function build () {
+    if (document.getElementById('dsh-tabbar')) return true
+    var column = document.querySelector('[data-pane="conversation"]')
+    if (!column) return false
+    var bar = document.createElement('div')
+    bar.id = 'dsh-tabbar'
+    var mk = function (tab, label) {
+      var b = document.createElement('button')
+      b.type = 'button'
+      b.dataset.tab = tab
+      b.textContent = label
+      b.addEventListener('click', function () { switchTo(tab) })
+      return b
+    }
+    bar.appendChild(mk('chat', '对话'))
+    bar.appendChild(mk('ssh', 'SSH'))
+    bar.appendChild(mk('board', '任务看板'))
+    column.insertBefore(bar, column.firstChild)
+    sync()
+    return true
+  }
+  var built = build()
+  if (!built) {
+    var obs = new MutationObserver(function () {
+      if (build()) obs.disconnect()
+    })
+    obs.observe(document.body, { childList: true, subtree: true })
+  }
+  // 同步外部激活（侧边栏入口点击 / 插件自身打开）
+  try {
+    new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ['data-dsh-ssh-active', 'data-dsh-taskboard-active'] })
+  } catch (e) { /* ignore */ }
+  document.addEventListener('dsh-panel-activate', sync)
+  window.addEventListener('dsh-panel-activate', sync)
+})()
+`
+
+// ============================================================================
+// 移动端控制按钮（右下角控制条"移"）：一键开启/关闭局域网访问。
+// 开启：主进程把 DSH 服务绑定到局域网 IP 并显示访问地址，手机浏览器即可控制；
+// 关闭：恢复仅本机访问。开启前主进程会弹出安全确认。
+// ============================================================================
+const MOBILE_JS = `
+(function () {
+  if (document.getElementById('frost-mobile')) return
+  function ensure () {
+    if (document.getElementById('frost-mobile')) return true
+    var titlebar = document.getElementById('frost-titlebar')
+    if (!titlebar) return false
+    var btn = document.createElement('button')
+    btn.id = 'frost-mobile'
+    btn.title = '移动端控制（局域网访问）'
+    btn.textContent = '移'
+    btn.className = 'frost-btn'
+    btn.addEventListener('mouseenter', function () { btn.style.background = 'rgba(109,124,255,0.22)' })
+    btn.addEventListener('mouseleave', function () { btn.style.background = 'transparent' })
+    btn.addEventListener('mousedown', function (e) { e.stopPropagation() })
+    btn.addEventListener('click', function (e) { e.stopPropagation(); toggleMobile(btn) })
+    var minBtn = document.getElementById('frost-min')
+    if (minBtn) titlebar.insertBefore(btn, minBtn)
+    else titlebar.appendChild(btn)
+    return true
+  }
+  function toggleMobile (btn) {
+    if (!window.frostAPI || !window.frostAPI.mobileToggle) { alert('当前环境不支持移动端控制'); return }
+    btn.disabled = true
+    btn.textContent = '…'
+    window.frostAPI.mobileToggle().then(function (res) {
+      btn.disabled = false
+      if (res && res.ok) {
+        btn.textContent = '移'
+        // 访问地址由主进程弹框显示，窗口随后跳转
+      } else if (res && res.cancelled) {
+        btn.textContent = '移'
+      } else {
+        alert('操作失败：' + ((res && res.error) || '未知错误'))
+        btn.textContent = '移'
+      }
+    }).catch(function () { btn.disabled = false; btn.textContent = '移' })
+  }
+  if (!ensure()) {
+    var obs = new MutationObserver(function () { if (ensure()) obs.disconnect() })
+    obs.observe(document.body, { childList: true, subtree: true })
+  }
+})()
+`
+
+// ============================================================================
+// 已归档对话查看面板：通过 DSH 原生 API（/api/workspace.list + session.list +
+// session.history）列出归档会话并只读查看对话内容。磨砂风格，与 FROST 一致。
+// ============================================================================
+const ARCHIVE_JS = `
+(function () {
+  if (document.getElementById('archive-btn')) return
+  var API_BASE = '/api'
+  function rpc (method, payload) {
+    return fetch(API_BASE + '/' + method, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'client-request', rpcId: (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()), method: method, payload: payload || {} })
+    }).then(function (r) { return r.json() }).then(function (env) {
+      if (env && env.result && env.result.ok) return env.result.value
+      throw new Error((env && env.result && env.result.error && env.result.error.message) || 'RPC failed: ' + method)
+    })
+  }
+  function el (tag, cls, text) {
+    var n = document.createElement(tag)
+    if (cls) n.className = cls
+    if (text !== undefined) n.textContent = text
+    return n
+  }
+  var css = [
+    '#archive-panel { position: fixed; right: 18px; top: 60px; width: 460px; max-width: calc(100vw - 40px); max-height: calc(100vh - 140px); display: none; flex-direction: column; z-index: 38; border-radius: 16px; background: rgba(250,249,253,0.86); -webkit-backdrop-filter: blur(28px) saturate(180%); backdrop-filter: blur(28px) saturate(180%); border: 1px solid rgba(255,255,255,0.7); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 12px 40px rgba(20,30,60,0.18); overflow: hidden; font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; color: #2c3552; }',
+    '#archive-panel.archive-open { display: flex; }',
+    '#archive-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid rgba(60,70,110,0.12); font-weight: 600; flex: none; }',
+    '#archive-close { margin-left: auto; cursor: pointer; border: 0; background: transparent; color: #4a5578; font-size: 14px; padding: 2px 10px; border-radius: 8px; }',
+    '#archive-close:hover { background: rgba(224,49,49,0.85); color: #fff; }',
+    '#arch-back { cursor: pointer; border: 0; background: transparent; color: #4a5578; padding: 2px 10px; border-radius: 8px; font-size: 13px; }',
+    '#arch-back:hover { background: rgba(109,124,255,0.2); }',
+    '#archive-body { overflow: auto; padding: 8px; flex: 1; }',
+    '.arch-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; cursor: pointer; }',
+    '.arch-item:hover { background: rgba(109,124,255,0.12); }',
+    '.arch-item .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+    '.arch-item .m { font-size: 11px; color: #7a86a8; flex: none; }',
+    '.arch-empty { text-align: center; color: #8b93a9; padding: 24px 0; }',
+    '.arch-msg { padding: 8px 12px; margin: 6px 0; border-radius: 12px; word-break: break-word; max-height: 340px; overflow: auto; }',
+    '.arch-msg.user { background: rgba(109,124,255,0.16); margin-left: 28px; }',
+    '.arch-msg.assistant { background: rgba(255,255,255,0.55); margin-right: 28px; }',
+    '.arch-msg .who { display: block; font-size: 11px; color: #7a86a8; margin-bottom: 4px; }',
+    '.arch-tool { font-size: 11px; color: #6d7cff; padding: 2px 0; }',
+    'body[data-ds-dark-theme] #archive-panel { background: rgba(24,28,42,0.88); color: #d8e2f5; border-color: rgba(120,140,190,0.25); }',
+    'body[data-ds-dark-theme] #archive-close, body[data-ds-dark-theme] #arch-back { color: #a8b8d8; }',
+    'body[data-ds-dark-theme] .arch-item .m, body[data-ds-dark-theme] .arch-msg .who, body[data-ds-dark-theme] .arch-empty { color: #7c89a8; }',
+    'body[data-ds-dark-theme] .arch-msg.assistant { background: rgba(44,52,76,0.6); }',
+    'body[data-ds-dark-theme] .arch-msg.user { background: rgba(86,100,180,0.28); }'
+  ].join('\\n')
+  var style = document.createElement('style')
+  style.textContent = css
+  document.head.appendChild(style)
+
+  // 按钮挂到顶部标题框（最小化按钮左侧）
+  var titlebar = document.getElementById('frost-titlebar')
+  var btn = el('button', null, '📁')
+  btn.id = 'archive-btn'
+  btn.title = '已归档对话'
+  btn.className = 'frost-btn'
+  btn.addEventListener('mouseenter', function () { btn.style.background = 'rgba(109,124,255,0.22)' })
+  btn.addEventListener('mouseleave', function () { btn.style.background = 'transparent' })
+  btn.addEventListener('mousedown', function (e) { e.stopPropagation() })
+  btn.addEventListener('click', function (e) { e.stopPropagation(); togglePanel() })
+  if (titlebar) {
+    var minBtn = document.getElementById('frost-min')
+    if (minBtn) titlebar.insertBefore(btn, minBtn)
+    else titlebar.appendChild(btn)
+  }
+
+  // 面板
+  var panel = el('div')
+  panel.id = 'archive-panel'
+  var head = el('div')
+  head.id = 'archive-head'
+  var back = el('button', null, '← 返回')
+  back.id = 'arch-back'
+  back.style.display = 'none'
+  var title = el('span', null, '📁 已归档对话')
+  var close = el('button', null, '✕')
+  close.id = 'archive-close'
+  head.appendChild(back); head.appendChild(title); head.appendChild(close)
+  var body = el('div')
+  body.id = 'archive-body'
+  panel.appendChild(head); panel.appendChild(body)
+  document.body.appendChild(panel)
+
+  close.addEventListener('click', function () { panel.classList.remove('archive-open') })
+  back.addEventListener('click', function () { showList() })
+
+  function togglePanel () {
+    if (panel.classList.contains('archive-open')) { panel.classList.remove('archive-open'); return }
+    panel.classList.add('archive-open')
+    showList()
+  }
+  function fmtTime (ms) {
+    if (!ms) return ''
+    var d = new Date(ms)
+    var p = function (n) { return (n < 10 ? '0' : '') + n }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes())
+  }
+  function showList () {
+    back.style.display = 'none'
+    title.textContent = '📁 已归档对话'
+    body.innerHTML = ''
+    body.appendChild(el('div', 'arch-empty', '加载中…'))
+    rpc('workspace.list', {}).then(function (ws) {
+      var archived = ws.archivedSessionIds || []
+      if (archived.length === 0) {
+        body.innerHTML = ''
+        body.appendChild(el('div', 'arch-empty', '暂无已归档对话'))
+        return
+      }
+      return rpc('session.list', {}).then(function (sl) {
+        var byId = {}
+        ;(sl.items || []).forEach(function (s) { byId[s.sessionId] = s })
+        body.innerHTML = ''
+        archived.forEach(function (sid) {
+          var s = byId[sid]
+          var item = el('div', 'arch-item')
+          var t = el('span', 't', (s && s.projections && s.projections.values && s.projections.values.title) || sid)
+          var m = el('span', 'm', s ? fmtTime(s.updatedAt) : '')
+          var restore = el('button', null, '↩ 恢复')
+          restore.title = '恢复该会话并继续对话'
+          restore.style.cssText = 'border:1px solid rgba(109,124,255,0.4);background:rgba(109,124,255,0.12);color:#4a54c8;font-size:11px;cursor:pointer;padding:2px 8px;border-radius:8px;flex:none;'
+          restore.addEventListener('mouseenter', function () { restore.style.background = 'rgba(109,124,255,0.28)' })
+          restore.addEventListener('mouseleave', function () { restore.style.background = 'rgba(109,124,255,0.12)' })
+          restore.addEventListener('mousedown', function (e) { e.stopPropagation() })
+          restore.addEventListener('click', function (e) {
+            e.stopPropagation()
+            restoreSession(sid, restore)
+          })
+          item.appendChild(t); item.appendChild(m); item.appendChild(restore)
+          item.addEventListener('click', function () { showChat(sid) })
+          body.appendChild(item)
+        })
+      })
+    }).catch(function (err) {
+      body.innerHTML = ''
+      body.appendChild(el('div', 'arch-empty', '加载失败：' + err.message))
+    })
+  }
+  function restoreSession (sid, btn) {
+    if (!window.frostAPI || !window.frostAPI.restoreArchived) {
+      alert('当前环境不支持恢复归档会话')
+      return
+    }
+    var prev = btn.textContent
+    btn.textContent = '恢复中…'
+    btn.disabled = true
+    window.frostAPI.restoreArchived([sid]).then(function (res) {
+      if (res && res.ok) {
+        if (res.needRestart) {
+          alert(res.message || '已恢复；请重启 DSH 服务后生效')
+          btn.textContent = prev
+          btn.disabled = false
+        } else {
+          // 主进程已重启服务并刷新页面
+          btn.textContent = '✓ 已恢复'
+        }
+      } else {
+        alert('恢复失败：' + ((res && res.error) || '未知错误'))
+        btn.textContent = prev
+        btn.disabled = false
+      }
+    }).catch(function (err) {
+      alert('恢复失败：' + String(err && err.message || err))
+      btn.textContent = prev
+      btn.disabled = false
+    })
+  }
+  function showChat (sid) {
+    back.style.display = ''
+    title.textContent = '对话内容'
+    body.innerHTML = ''
+    body.appendChild(el('div', 'arch-empty', '加载中…'))
+    rpc('session.history', { sessionId: sid }).then(function (h) {
+      var evs = h.events || []
+      var msgs = evs.filter(function (e) {
+        return e.event && (e.event.type === 'user/message' || e.event.type === 'assistant/message')
+      }).sort(function (a, b) { return a.event.seq - b.event.seq })
+      body.innerHTML = ''
+      if (msgs.length === 0) { body.appendChild(el('div', 'arch-empty', '该会话暂无消息')); return }
+      msgs.forEach(function (m) {
+        var ev = m.event
+        var data = ev.data
+        var content = (ev.type === 'assistant/message') ? (data.message && data.message.content) : data.content
+        var wrap = el('div', 'arch-msg ' + (ev.type === 'user/message' ? 'user' : 'assistant'))
+        wrap.appendChild(el('span', 'who', ev.type === 'user/message' ? '你' : 'AI'))
+        ;(content || []).forEach(function (block) {
+          if (block.type === 'text' && block.text) {
+            wrap.appendChild(el('div', null, block.text))
+          } else if (block.type === 'reasoning' && block.text) {
+            wrap.appendChild(el('div', 'arch-tool', '💭 ' + String(block.text).slice(0, 200)))
+          } else if (block.type === 'tool-call' && block.name) {
+            wrap.appendChild(el('div', 'arch-tool', '🔧 ' + block.name))
+          }
+        })
+        body.appendChild(wrap)
+      })
+    }).catch(function (err) {
+      body.innerHTML = ''
+      body.appendChild(el('div', 'arch-empty', '加载失败：' + err.message))
+    })
+  }
+})()
+`
+
 function createWindow () {
   const material = windowsFrostMaterial()
   const win = new BrowserWindow({
@@ -491,17 +879,21 @@ function createWindow () {
 
   // 磨砂注入（幂等）。did-finish-load + 多次定时兜底：
   // 冷启动/慢机器上 SPA 可能数秒后才渲染完成，多次注入保证任何时机都生效。
-  // 重复注入时先移除上一份 CSS（removeInsertedCSS），避免样式表无限累积。
+  // insertCSS 返回 Promise<key>，必须 await 拿到真正的 key 才能 removeInsertedCSS，
+  // 否则旧样式表无法移除、会无限累积。
   let frostCssKey = null
-  function injectFrost () {
+  async function injectFrost () {
     if (win.isDestroyed()) return
     try {
       if (frostCssKey !== null) {
-        try { win.webContents.removeInsertedCSS(frostCssKey) } catch (e) { /* ignore */ }
+        try { await win.webContents.removeInsertedCSS(frostCssKey) } catch (e) { /* ignore */ }
         frostCssKey = null
       }
-      frostCssKey = win.webContents.insertCSS(FROST_CSS)
+      frostCssKey = await win.webContents.insertCSS(FROST_CSS)
       win.webContents.executeJavaScript(FROST_JS)
+      win.webContents.executeJavaScript(TAB_JS)
+      win.webContents.executeJavaScript(MOBILE_JS)
+      win.webContents.executeJavaScript(ARCHIVE_JS)
     } catch (err) {
       console.log('[frost-inject-err] ' + String(err))
     }
@@ -537,7 +929,7 @@ function createWindow () {
     win.webContents.executeJavaScript(`(function () {
       var root = document.documentElement
       var out = {
-        hasCtl: !!document.getElementById('frost-ctl'),
+        hasCtl: !!document.getElementById('frost-titlebar'),
         htmlBg: getComputedStyle(root).backgroundColor,
         htmlBgImage: getComputedStyle(root).backgroundImage.slice(0, 60),
         frostAlpha: root.style.getPropertyValue('--frost-alpha'),
@@ -617,9 +1009,188 @@ ipcMain.on('frost:drag-end', () => {
 })
 
 // ============================================================================
-// 启动流程：先确保 DSH 服务就绪，再打开磨砂窗口
+// 恢复归档会话：DSH 没有"取消归档"API，这里由主进程
+//   停服务 → 改 workspace.json（从 archivedSessionIds 移除）→ 重启服务 → 刷新窗口
+// 服务重启后会话回到活跃列表，即可继续对话。
 // ============================================================================
-let recovering = false   // 渲染进程崩溃后正在自动重建窗口（期间 window-all-closed 不退出）
+function dshHomePath () {
+  return process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
+}
+
+function workspaceStorageFile () {
+  return path.join(dshHomePath(), 'storages', 'workspace.json')
+}
+
+// 停止由本实例拉起的服务，并等待端口释放
+async function stopOwnedService () {
+  if (serviceProc) {
+    const p = serviceProc
+    serviceProc = null
+    try { p.kill() } catch (e) { /* ignore */ }
+    await new Promise((resolve) => {
+      if (p.exitCode !== null || p.signalCode !== null) return resolve()
+      const t = setTimeout(resolve, 8000)
+      p.once('exit', () => { clearTimeout(t); resolve() })
+    })
+  }
+  for (let i = 0; i < 20; i++) {
+    if (!(await checkPort(PORT))) return true
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  return true
+}
+
+// 重启 DSH 服务（恢复归档后需要服务重载 workspace 域）
+async function restartService () {
+  const wasOurs = serviceStartedByUs
+  await stopOwnedService()
+  serviceStartedByUs = false
+  const r = startDshService()
+  if (!r.ok) return r
+  const up = await waitForService(60 * 1000)
+  if (!up) return { ok: false, error: 'DSH 服务重启超时' }
+  serviceStartedByUs = wasOurs
+  return { ok: true }
+}
+
+ipcMain.handle('frost:restore-archived', async (e, sessionIds) => {
+  const ids = Array.isArray(sessionIds) ? sessionIds.filter((x) => typeof x === 'string') : []
+  if (ids.length === 0) return { ok: false, error: '缺少会话 ID' }
+  try {
+    const file = workspaceStorageFile()
+    if (!fs.existsSync(file)) return { ok: false, error: '找不到 workspace 存储：' + file }
+    const doc = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const archived = (doc.global && Array.isArray(doc.global.archivedSessionIds)) ? doc.global.archivedSessionIds : []
+    const removed = archived.filter((id) => !ids.includes(id))
+    const changed = removed.length !== archived.length
+    if (!changed) return { ok: true, changed: false, message: '会话本就不在归档列表' }
+
+    if (!serviceStartedByUs) {
+      // 服务不是本实例拉起的（外部管理）：只改文件，由外部重启生效
+      doc.global.archivedSessionIds = removed
+      const tmp = file + '.tmp'
+      fs.writeFileSync(tmp, JSON.stringify(doc, null, 2), 'utf8')
+      fs.renameSync(tmp, file)
+      return { ok: true, changed: true, needRestart: true, message: '已修改归档状态；DSH 服务由外部管理，请重启服务后生效' }
+    }
+
+    // 停服务（防止运行中的服务把旧状态写回覆盖）→ 改文件 → 重启服务
+    await stopOwnedService()
+    doc.global.archivedSessionIds = removed
+    const tmp = file + '.tmp'
+    fs.writeFileSync(tmp, JSON.stringify(doc, null, 2), 'utf8')
+    fs.renameSync(tmp, file)
+    logFrost('[restore] unarchived ' + ids.join(', ') + ' via ' + file)
+    const r = await restartService()
+    if (!r.ok) return r
+    const win = BrowserWindow.fromWebContents(e.sender)
+    if (win && !win.isDestroyed()) win.webContents.reload()
+    return { ok: true, changed: true, restored: ids }
+  } catch (err) {
+    logFrost('[restore-archived-err] ' + String((err && err.stack) || err))
+    return { ok: false, error: String((err && err.message) || err) }
+  }
+})
+
+// ============================================================================
+// 移动端控制：一键把 DSH Web 服务绑定到局域网 IP，手机浏览器访问控制。
+// 安全：开启前弹框确认；仅绑定具体局域网 IP（非 0.0.0.0）；关闭即恢复仅本机。
+// 注：打包内 dsh-host-webserver 的 host schema 已放宽以允许局域网 IP（0.1.0-rc.6
+// 官方默认只允许 127.0.0.1/0.0.0.0，且 0.0.0.0 被启动逻辑禁止）。
+// ============================================================================
+let mobileActive = false
+let mobileLanIp = null
+
+function detectLanIp () {
+  const ifaces = os.networkInterfaces()
+  for (const list of Object.values(ifaces)) {
+    for (const i of list || []) {
+      if (i.family === 'IPv4' && !i.internal) return i.address
+    }
+  }
+  return null
+}
+
+function tryAddFirewallRule (port) {
+  try {
+    execFileSync('netsh', [
+      'advfirewall', 'firewall', 'add', 'rule',
+      'name=DSH Frosted Mobile', 'dir=in', 'action=allow',
+      'protocol=TCP', 'localport=' + String(port)
+    ], { windowsHide: true, timeout: 8000 })
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+// 在 127.0.0.1 与局域网 IP 绑定之间切换 DSH 服务
+async function switchServiceBind (onLan) {
+  const wasOurs = serviceStartedByUs
+  await stopOwnedService()
+  serviceStartedByUs = false
+  let r
+  if (onLan) {
+    const ip = detectLanIp()
+    if (!ip) return { ok: false, error: '未检测到局域网 IP（请确认已连接网络）' }
+    r = startDshService(['--host', ip, '--trusted-host', ip])
+    mobileLanIp = ip
+  } else {
+    r = startDshService()
+    mobileLanIp = null
+  }
+  if (!r.ok) return r
+  const up = await waitForService(60 * 1000)
+  if (!up) return { ok: false, error: 'DSH 服务重启超时' }
+  serviceStartedByUs = wasOurs
+  mobileActive = onLan
+  return { ok: true }
+}
+
+ipcMain.handle('frost:mobile-toggle', async (e) => {
+  if (!mobileActive) {
+    // 开启前：确认弹框 + 风险提示
+    const choice = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: ['开启移动端控制', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+      title: 'DSH 磨砂玻璃 - 移动端控制',
+      message: '开启后，手机（同一局域网）可访问并控制本机的 DeepSeek Harness（可执行命令）。',
+      detail: '安全警告：开启期间，同一 Wi-Fi / 局域网内的任何人都无需密码即可控制本机执行命令！请仅在可信网络使用，用完立即关闭。',
+    })
+    if (choice.response !== 0) return { ok: false, cancelled: true }
+    const ip = detectLanIp()
+    if (!ip) return { ok: false, error: '未检测到局域网 IP（请确认已连接网络）' }
+    const r = await switchServiceBind(true)
+    if (!r.ok) return r
+    const fw = tryAddFirewallRule(PORT)
+    const url = 'http://' + ip + ':' + PORT
+    logFrost('[mobile] enabled at ' + url + ' firewall=' + fw)
+    const win = BrowserWindow.fromWebContents(e.sender)
+    // 先让用户看到访问地址，再跳转窗口
+    if (win && !win.isDestroyed()) {
+      await dialog.showMessageBox({
+        type: fw ? 'info' : 'warning',
+        title: '移动端控制已开启',
+        message: '访问地址：' + url,
+        detail: '手机连接同一 Wi-Fi 后，用浏览器打开上面的地址即可控制本机。\n\n关闭方式：回到本机窗口，再次点击右下角"移"按钮。\n' + (fw ? '' : '警告：未能自动配置 Windows 防火墙，手机可能无法访问；请手动放行入站 TCP 端口 ' + PORT + '。'),
+        noLink: true,
+      })
+      win.loadURL(url)
+    }
+    return { ok: true, url, firewall: fw }
+  }
+  // 关闭：恢复仅本机
+  const r = await switchServiceBind(false)
+  if (!r.ok) return r
+  logFrost('[mobile] disabled')
+  const win = BrowserWindow.fromWebContents(e.sender)
+  if (win && !win.isDestroyed()) win.loadURL(TARGET_URL)
+  return { ok: true, url: TARGET_URL }
+})
+
 
 app.whenReady().then(async () => {
   const boot = await ensureDshService()
