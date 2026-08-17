@@ -476,7 +476,7 @@ const FROST_JS = `
 
   // 全局拖拽：按住页面任意非交互区域拖动窗口（移动超过 5px 阈值才触发，避免单击误触）
   var gDrag = { active: false, started: false, x: 0, y: 0 }
-  var IGNORE_SEL = 'button, input, textarea, select, a, label, iframe, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="switch"], [contenteditable="true"], [draggable="true"], [role="dialog"], [class*="modal"], [class*="dialog"], .xterm, .xterm-screen, [class*="xterm"], [data-dsh-ssh-view], [data-dsh-taskboard-view], [data-dsh-taskboard-board], #dsh-tabbar, #frost-ctl, #frost-winctl'
+  var IGNORE_SEL = 'button, input, textarea, select, a, label, iframe, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="switch"], [contenteditable="true"], [draggable="true"], [role="dialog"], [class*="modal"], [class*="dialog"], .xterm, .xterm-screen, [class*="xterm"], [data-dsh-ssh-view], [data-dsh-taskboard-view], [data-dsh-taskboard-board], #frost-ctl, #frost-winctl'
   document.addEventListener('mousedown', function (e) {
     if (e.button !== 0) return
     if (e.target.closest && e.target.closest(IGNORE_SEL)) return
