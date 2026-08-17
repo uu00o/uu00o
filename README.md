@@ -20,14 +20,15 @@ frosted-electron/
 ├── package-lock.json
 ├── start.bat               # 启动脚本
 ├── 自开关.bat              # 开机自启开关
+├── build.ps1               # 一键打包脚本（输出自包含 exe 到 dist/）
 ├── make-icon.ps1           # 生成/替换图标脚本
+├── diag-layout.js          # CDP 诊断脚本：标签栏/列/frame 布局定位
+├── diag-tb.js              # CDP 诊断脚本：标题框结构/控件/拖动验证
 ├── icon.ico
 ├── screen.png              # 效果截图
-├── vendor/
-│   ├── node/node.exe       # 内置 Node.js 运行时（约 88MB）
-│   └── dsh/                # @deepseek-ai/dsh CLI 及全部依赖
-├── .test-dsh-home/         # 本地测试用的 DSH 主目录（测试数据）
-└── .electron-cache/        # Electron 下载缓存（仅校验文件）
+└── vendor/
+    ├── node/node.exe       # 内置 Node.js 运行时（约 88MB）
+    └── dsh/                # @deepseek-ai/dsh CLI 及全部依赖
 ```
 
 > 仓库根目录同时包含 `.gitignore`（当前策略：仅跟踪 `frosted-electron/` 与仓库说明文件）与 `README.md`。
@@ -44,12 +45,21 @@ npm start
 
 ## 打包发布
 
+一键打包（推荐）：
+
 ```powershell
-# 使用 electron-packager 打包 64 位 Windows 应用
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
+
+脚本会自动：定位 node → 安装 npm 依赖（electron、electron-packager、@deepseek-ai/dsh）→ 拷贝 `node.exe` 与完整 dsh CLI 到 `vendor/` → 用 electron-packager 打包自包含 64 位 exe 到 `dist/`（不启用 asar，保持 `vendor/` 可读以支持服务进程调用）。
+
+或手动打包：
+
+```powershell
 npx electron-packager . DSHFrostedGlass --platform=win32 --arch=x64 --icon=icon.ico
 ```
 
-打包后把 `vendor/` 目录一同放进应用目录，即可实现自包含分发。
+打包后把 `vendor/` 目录一同放进应用目录，即可实现自包含分发（`dist/` 与 `vendor/` 已加入 .gitignore，不会入库）。
 
 ## 环境变量（可选）
 
@@ -64,4 +74,5 @@ npx electron-packager . DSHFrostedGlass --platform=win32 --arch=x64 --icon=icon.
 ## 说明
 
 - `vendor/node/node.exe` 约 88.5MB，已超过 GitHub 建议的 50MB 但低于 100MB 硬上限，可正常托管（推送时会有 Large files 提示，属正常警告）。
+- `diag-layout.js` / `diag-tb.js` 是开发期诊断脚本，通过 CDP（Chrome DevTools Protocol，默认调试端口 9239）检查标签栏/标题框布局，仅供调试使用，不影响运行。
 - 本仓库只跟踪 `frosted-electron/` 应用本体，工作区中的其他大目录（UE 工程资源、PPT 素材等）不纳入版本控制。
