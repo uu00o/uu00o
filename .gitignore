@@ -42,3 +42,6 @@ frosted-electron/node_modules/
 frosted-electron/dist/
 frosted-electron/.electron-cache/
 frosted-electron/.npm-cache/
+
+# frosted-electron 由 main 分支管理（完全隔离，yisa 不包含）
+frosted-electron/
