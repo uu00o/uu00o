@@ -1,0 +1,15 @@
+{
+  "name": "isaac-roguelike",
+  "version": "0.1.0",
+  "description": "以撒的结合风格肉鸽游戏 - 最小可玩版 (Electron + HTML5 Canvas)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node headless-test.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}
