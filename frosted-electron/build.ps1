@@ -13,6 +13,21 @@ $root = $PSScriptRoot
 
 Write-Host '===== DSH Frosted Glass Builder ====='
 
+# 深度删除：超长路径（>260 字符）会让 Remove-Item 失败，
+# 先 robocopy 空目录镜像清空（robocopy 支持长路径）再删目录。
+function Remove-DeepDir([string]$dir) {
+  if (-not (Test-Path $dir)) { return }
+  try {
+    Remove-Item -Recurse -Force $dir -ErrorAction Stop
+  } catch {
+    $empty = Join-Path $env:TEMP ('dsh-rm-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force $empty | Out-Null
+    robocopy $empty $dir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+    Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+    Remove-Item -Recurse -Force $empty -ErrorAction SilentlyContinue
+  }
+}
+
 # --- 1. locate node ---
 $nodeExe = $null
 foreach ($cand in @($env:NODE_DIR, 'C:\Program Files\nodejs', 'C:\Program Files (x86)\nodejs')) {
@@ -67,7 +82,7 @@ if (-not (Test-Path (Join-Path $dshSrc 'lib\bin.js'))) {
   Write-Host 'ERROR: @deepseek-ai/dsh not found. Run: npm install @deepseek-ai/dsh@0.1.0-rc.6' -ForegroundColor Red
   exit 1
 }
-if (Test-Path $vendorDshDir) { Remove-Item -Recurse -Force $vendorDshDir }
+if (Test-Path $vendorDshDir) { Remove-DeepDir $vendorDshDir }
 robocopy $dshSrc $vendorDshDir /E /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -gt 7) { Write-Host 'ERROR: robocopy failed' -ForegroundColor Red; exit 1 }
 
@@ -104,7 +119,7 @@ Write-Host '[4/6] packaging with electron-packager (this downloads the Electron 
 $packager = Join-Path $root 'node_modules\electron-packager\bin\electron-packager.js'
 $cache = Join-Path $root '.electron-cache'
 $out   = Join-Path $root 'dist'
-if (Test-Path $out) { Remove-Item -Recurse -Force $out }
+if (Test-Path $out) { Remove-DeepDir $out }
 & (Join-Path (Split-Path $nodeExe) 'node.exe') $packager $root 'DSHFrostedGlass' `
   --platform=win32 --arch=x64 --out=$out --overwrite --asar=false `
   --icon=(Join-Path $root 'icon.ico') `
