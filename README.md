@@ -45,18 +45,31 @@ npm start
 
 或使用 `start.bat`（会自动拉起 DSH 服务并打开磨砂窗口）。
 
-## 自行构建（生成可分享的 exe）
+## 一键构建（生成可分享的 exe）
 
-需要：Windows + Node.js 18+（构建机）
+需要：Windows + Node.js 18+（构建机，https://nodejs.org）
 
+**方式一（推荐）：双击构建**
+```bat
+frosted-electron\build.bat
+```
+双击即自动完成：检查 Node → 安装依赖（Electron / electron-packager / @deepseek-ai/dsh）→ 复制本机 node.exe → 内嵌 dsh 依赖 → 修补移动端 schema → 打包 → 产出 `dist\DSHFrostedGlass-win32-x64\`。
+
+**方式二：命令行**
 ```powershell
 cd frosted-electron
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
-脚本自动完成：安装依赖（electron / electron-packager / @deepseek-ai/dsh）→ 复制本机 node.exe → 打包 Electron 壳 → 内嵌 vendor → 产出 `dist\DSHFrostedGlass-win32-x64\`。
+**从 GitHub 分支获取源码后构建**：
+```bash
+git clone -b project/DeepSeekHarness.exe https://github.com/uu00o/uu00o.git
+cd uu00o/frosted-electron
+build.bat
+```
+（或在 GitHub 页面切到 `project/DeepSeekHarness.exe` 分支 → Code → Download ZIP，解压后进 `frosted-electron` 双击 `build.bat`。）
 
-> 构建产物约 500MB（含 Electron 运行时与 dsh 依赖）。分享时请**整个文件夹一起发**（含 `resources\app\vendor`），单独拷 exe 无法工作。国内网络较慢时可取消 `build.ps1` 中镜像配置的注释（npmmirror）。
+> 首次构建会下载 Electron 运行时（约 100MB），耗时几分钟属正常。国内网络较慢时，编辑 `build.ps1` 取消镜像配置的注释（npmmirror）。构建产物约 500MB，分享时请**整个文件夹一起发**（含 `resources\app\vendor`），单独拷 exe 无法工作。
 
 ## 技术说明
 
