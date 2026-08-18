@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 # DSH Frosted Glass - one-click build script
 # Produces a self-contained Windows x64 exe package under dist/
 #   - bundles a copy of node.exe (taken from the local Node installation)
@@ -17,15 +17,11 @@ Write-Host '===== DSH Frosted Glass Builder ====='
 # 先 robocopy 空目录镜像清空（robocopy 支持长路径）再删目录。
 function Remove-DeepDir([string]$dir) {
   if (-not (Test-Path $dir)) { return }
-  try {
-    Remove-Item -Recurse -Force $dir -ErrorAction Stop
-  } catch {
-    $empty = Join-Path $env:TEMP ('dsh-rm-' + [guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Force $empty | Out-Null
-    robocopy $empty $dir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-    Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
-    Remove-Item -Recurse -Force $empty -ErrorAction SilentlyContinue
-  }
+  $empty = Join-Path $env:TEMP ('dsh-rm-' + [guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Force $empty | Out-Null
+  robocopy $empty $dir /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+  Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
+  Remove-Item -Recurse -Force $empty -ErrorAction SilentlyContinue
 }
 
 # --- 1. locate node ---
