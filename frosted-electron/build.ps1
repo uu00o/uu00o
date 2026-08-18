@@ -22,8 +22,19 @@ if (-not $nodeExe) {
   $found = Get-Command node.exe -ErrorAction SilentlyContinue
   if ($found) { $nodeExe = $found.Source }
 }
-if (-not $nodeExe) { Write-Host 'ERROR: node.exe not found. Install Node.js first.' -ForegroundColor Red; exit 1 }
+if (-not $nodeExe) { Write-Host 'ERROR: node.exe not found. Install Node.js first (https://nodejs.org).' -ForegroundColor Red; exit 1 }
 Write-Host "[1/6] node: $nodeExe"
+
+# --- 1.5 check node version (need >= 18 for Electron tooling) ---
+try {
+  $nodeVer = & $nodeExe -v
+  $nodeMajor = [int]($nodeVer -replace 'v', '' -split '\.')[0]
+  if ($nodeMajor -lt 18) {
+    Write-Host "WARN: Node $nodeVer detected; Node 18+ recommended." -ForegroundColor Yellow
+  } else {
+    Write-Host "  node version: $nodeVer (ok)"
+  }
+} catch { Write-Host 'WARN: could not read node version' -ForegroundColor Yellow }
 
 # --- 2. install npm deps (electron, electron-packager, dsh CLI) ---
 $npm = Join-Path (Split-Path $nodeExe) 'npm.cmd'
@@ -93,7 +104,8 @@ if (Test-Path $out) { Remove-Item -Recurse -Force $out }
   --ignore='^/node_modules$' --ignore='^/vendor$' --ignore='^/\.git$' `
   --ignore='^/build\.ps1$' --ignore='^/README\.md$' --ignore='^/\.gitignore$' `
   --ignore='^/start\.bat$' --ignore='^/自启开关\.bat$' --ignore='^/make-icon\.ps1$' `
-  --ignore='^/screen\.png$' --ignore='^/package-lock\.json$'
+  --ignore='^/screen\.png$' --ignore='^/package-lock\.json$' `
+  --ignore='^/diag-.*\.js$' --ignore='^/build\.bat$'
 if ($LASTEXITCODE -ne 0) { Write-Host 'ERROR: electron-packager failed' -ForegroundColor Red; exit 1 }
 
 # --- 5. copy vendor into the packaged app (robocopy keeps every file intact) ---
