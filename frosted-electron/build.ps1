@@ -46,7 +46,7 @@ try {
   # If you are behind a slow network, uncomment the mirror lines:
   # $env:npm_config_registry = 'https://registry.npmmirror.com'
   # $env:npm_config_electron_mirror = 'https://npmmirror.com/mirrors/electron/'
-  & $npm install --no-audit --no-fund
+  & $npm install --no-audit --no-fund --install-strategy=nested
   if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
 } finally { Pop-Location }
 
