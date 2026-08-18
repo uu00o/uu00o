@@ -38,6 +38,8 @@ try {
 
 # --- 2. install npm deps (electron, electron-packager, dsh CLI) ---
 $npm = Join-Path (Split-Path $nodeExe) 'npm.cmd'
+# 本地化 npm 缓存（不污染用户 AppData，构建目录自包含）
+$env:npm_config_cache = Join-Path $root '.npm-cache'
 Write-Host '[2/6] installing npm dependencies (electron, electron-packager, @deepseek-ai/dsh) ...'
 Push-Location $root
 try {
