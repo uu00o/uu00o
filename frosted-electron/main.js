@@ -197,10 +197,6 @@ const FROST_CSS = `
 html, body {
   background: rgba(250,247,240, var(--frost-alpha, 0.35)) !important;
 }
-/* 顶部标题框让位：页面内容整体下移 39px（标题框高 38 + 1px 边框），避免被遮挡 */
-body {
-  padding-top: 39px !important;
-}
 :root {
   --dsw-alias-bg-base: rgba(255,255,255,var(--frost-alpha, 0.35)) !important;
   --dsw-alias-bg-layer-1: rgba(255,255,255,var(--frost-alpha, 0.35)) !important;
@@ -307,52 +303,72 @@ html.frost-dark [class*="gradient"] {
 // 注入 JS：悬浮控制条（拖拽 + 透明度滑杆 + 最小化/关闭）
 const FROST_JS = `
 (function () {
-  if (document.getElementById('frost-titlebar')) return
+  if (document.getElementById('frost-ctl')) return
   var root = document.documentElement
   var css = [
-    '#frost-titlebar {',
-    '  position: fixed; top: 0; left: 0; right: 0; height: 38px; z-index: 39;',
-    '  display: flex; align-items: center; gap: 8px; padding: 0 12px;',
-    '  background: rgba(250, 249, 253, 0.6);',
-    '  -webkit-backdrop-filter: blur(24px) saturate(170%) brightness(1.06);',
-    '  backdrop-filter: blur(24px) saturate(170%) brightness(1.06);',
-    '  border-bottom: 1px solid rgba(255,255,255,0.5);',
-    '  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 2px 12px rgba(20,30,60,0.08);',
+    '#frost-ctl {',
+    '  position: fixed; right: 18px; bottom: 18px; z-index: 35;',
+    '  display: flex; align-items: center; gap: 8px;',
+    '  padding: 7px 14px; border-radius: 999px;',
+    '  background: rgba(250, 249, 253, 0.55);',
+    '  -webkit-backdrop-filter: blur(28px) saturate(180%) brightness(1.08);',
+    '  backdrop-filter: blur(28px) saturate(180%) brightness(1.08);',
+    '  border: 1px solid rgba(255,255,255,0.65);',
+    '  box-shadow:',
+    '    inset 0 1px 0 rgba(255,255,255,0.7),',
+    '    0 8px 28px rgba(20,30,60,0.14),',
+    '    0 2px 6px rgba(20,30,60,0.08);',
     '  font: 12px/1 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;',
     '  color: #3a4466; user-select: none; cursor: default;',
     '}',
-    '#frost-titlebar .frost-title { font-weight: 600; color: #4a54c8; margin-right: auto; padding-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
-    '#frost-titlebar label { display: flex; align-items: center; gap: 4px; color: #4a5578; flex: none; }',
-    '#frost-titlebar input[type=range] { width: 80px; accent-color: #6d7cff; cursor: pointer; }',
-    '#frost-titlebar .frost-val { min-width: 32px; text-align: right; font-variant-numeric: tabular-nums; color: #4a5578; flex: none; }',
-    '#frost-titlebar .frost-btn {',
-    '  width: 28px; height: 26px; border-radius: 8px; border: 0;',
+    '#frost-ctl .frost-ico { font-size: 13px; }',
+    '#frost-ctl label { display: flex; align-items: center; gap: 4px; color: #4a5578; }',
+    '#frost-ctl input[type=range] { width: 90px; accent-color: #6d7cff; cursor: pointer; }',
+    '#frost-ctl .frost-val { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: #4a5578; }',
+    '#frost-winctl {',
+    '  position: fixed; top: 10px; right: 10px; z-index: 36;',
+    '  display: flex; align-items: center; gap: 6px;',
+    '  padding: 4px; border-radius: 12px;',
+    '  background: rgba(250, 249, 253, 0.5);',
+    '  -webkit-backdrop-filter: blur(24px) saturate(170%) brightness(1.06);',
+    '  backdrop-filter: blur(24px) saturate(170%) brightness(1.06);',
+    '  border: 1px solid rgba(255,255,255,0.6);',
+    '  box-shadow:',
+    '    inset 0 1px 0 rgba(255,255,255,0.65),',
+    '    0 4px 16px rgba(20,30,60,0.12);',
+    '}',
+    '#frost-winctl .frost-btn {',
+    '  width: 30px; height: 26px; border-radius: 9px; border: 0;',
     '  background: transparent; color: #4a5578;',
-    '  font-size: 13px; line-height: 1; cursor: pointer; flex: none;',
+    '  font-size: 13px; line-height: 1; cursor: pointer;',
     '  display: inline-flex; align-items: center; justify-content: center;',
     '  transition: background 0.15s ease;',
     '}',
-    '#frost-titlebar .frost-btn:hover { background: rgba(109,124,255,0.22); color: #4a54c8; }',
-    '#frost-titlebar .frost-close:hover { background: rgba(224,49,49,0.85); color: #fff; }',
-    'body[data-ds-dark-theme] #frost-titlebar { background: rgba(22,26,40,0.75); border-bottom-color: rgba(120,140,190,0.15); }',
-    'body[data-ds-dark-theme] #frost-titlebar .frost-title { color: #dfe8ff; }',
-    'body[data-ds-dark-theme] #frost-titlebar label, body[data-ds-dark-theme] #frost-titlebar .frost-val, body[data-ds-dark-theme] #frost-titlebar .frost-btn { color: #a8b8d8; }'
+    '#frost-winctl .frost-btn:hover { background: rgba(109,124,255,0.22); color: #4a54c8; }',
+    '#frost-winctl .frost-btn.frost-close:hover { background: rgba(224,49,49,0.85); color: #fff; }'
   ].join('\\n')
   var style = document.createElement('style')
   style.textContent = css
   document.head.appendChild(style)
 
-  // 顶部标题框：标题 + 透明度滑杆 + 最小化/关闭（归档、移动端按钮由各自注入脚本插入）
+  // 右下角：磨砂控制条（❄ + 透明度滑杆，按住可拖动窗口）
   var bar = document.createElement('div')
-  bar.id = 'frost-titlebar'
+  bar.id = 'frost-ctl'
   bar.innerHTML = [
-    '<span class="frost-title">DSH 磨砂玻璃</span>',
+    '<span class="frost-ico">❄</span>',
     '<label>透明<input type="range" id="frost-alpha" min="0" max="100" value="65"></label>',
-    '<span class="frost-val" id="frost-val">65%</span>',
+    '<span class="frost-val" id="frost-val">65%</span>'
+  ].join('')
+  document.body.appendChild(bar)
+
+  // 右上角：窗口控制按钮（最小化 / 关闭）
+  var winctl = document.createElement('div')
+  winctl.id = 'frost-winctl'
+  winctl.innerHTML = [
     '<button class="frost-btn" id="frost-min" title="最小化">─</button>',
     '<button class="frost-btn frost-close" id="frost-close" title="关闭">✕</button>'
   ].join('')
-  document.body.appendChild(bar)
+  document.body.appendChild(winctl)
 
   var alpha = document.getElementById('frost-alpha')
   var val = document.getElementById('frost-val')
@@ -379,7 +395,7 @@ const FROST_JS = `
     new MutationObserver(function () { syncDark() }).observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
   } catch (e) { /* older engines */ }
   var darkTimer = setInterval(function () {
-    if (!document.getElementById('frost-titlebar')) { clearInterval(darkTimer); return }
+    if (!document.getElementById('frost-ctl')) { clearInterval(darkTimer); return }
     syncDark()
   }, 3000)
 
@@ -393,7 +409,7 @@ const FROST_JS = `
     var all = document.querySelectorAll('*')
     for (var i = 0; i < all.length; i++) {
       var el = all[i]
-      if (el.id === 'frost-titlebar' || el === document.body || el === document.documentElement) continue
+      if (el.id === 'frost-ctl' || el.id === 'frost-winctl' || el === document.body || el === document.documentElement) continue
       var bg = getComputedStyle(el).backgroundColor
       var m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/)
       if (m) {
@@ -418,7 +434,7 @@ const FROST_JS = `
     var all = document.querySelectorAll('body *')
     for (var i = 0; i < all.length; i++) {
       var el = all[i]
-      if (el.id === 'frost-titlebar') continue
+      if (el.id === 'frost-ctl' || el.id === 'frost-winctl') continue
       var cs = getComputedStyle(el)
       if (cs.position !== 'fixed' && cs.position !== 'absolute') continue
       var r = el.getBoundingClientRect()
@@ -436,14 +452,14 @@ const FROST_JS = `
   }
   clearFullscreenBackdrops()
   var backdropTimer = setInterval(function () {
-    if (!document.getElementById('frost-titlebar')) { clearInterval(backdropTimer); return }
+    if (!document.getElementById('frost-ctl')) { clearInterval(backdropTimer); return }
     clearFullscreenBackdrops()
   }, 30000)
 
-  // 手动拖拽：按住标题框空白处（非控件）移动窗口（透明窗口下系统拖拽常失效）
+  // 手动拖拽：按住控制条空白处移动窗口（透明窗口下系统拖拽常失效）
   var dragging = false
   bar.addEventListener('mousedown', function (e) {
-    if (e.target.closest('button, input, label, select, a')) return
+    if (e.target.closest('button, input')) return
     dragging = true
     if (window.frostAPI) window.frostAPI.dragStart({
       x: e.screenX - window.screenX,
@@ -460,7 +476,7 @@ const FROST_JS = `
 
   // 全局拖拽：按住页面任意非交互区域拖动窗口（移动超过 5px 阈值才触发，避免单击误触）
   var gDrag = { active: false, started: false, x: 0, y: 0 }
-  var IGNORE_SEL = 'button, input, textarea, select, a, label, iframe, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="switch"], [contenteditable="true"], [draggable="true"], [role="dialog"], [class*="modal"], [class*="dialog"], .xterm, .xterm-screen, [class*="xterm"], [data-dsh-ssh-view], [data-dsh-taskboard-view], [data-dsh-taskboard-board], #dsh-tabbar, #frost-titlebar'
+  var IGNORE_SEL = 'button, input, textarea, select, a, label, iframe, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="checkbox"], [role="radio"], [role="switch"], [contenteditable="true"], [draggable="true"], [role="dialog"], [class*="modal"], [class*="dialog"], .xterm, .xterm-screen, [class*="xterm"], [data-dsh-ssh-view], [data-dsh-taskboard-view], [data-dsh-taskboard-board], #frost-ctl, #frost-winctl'
   document.addEventListener('mousedown', function (e) {
     if (e.button !== 0) return
     if (e.target.closest && e.target.closest(IGNORE_SEL)) return
@@ -604,20 +620,18 @@ const MOBILE_JS = `
   if (document.getElementById('frost-mobile')) return
   function ensure () {
     if (document.getElementById('frost-mobile')) return true
-    var titlebar = document.getElementById('frost-titlebar')
-    if (!titlebar) return false
+    var ctl = document.getElementById('frost-ctl')
+    if (!ctl) return false
     var btn = document.createElement('button')
     btn.id = 'frost-mobile'
     btn.title = '移动端控制（局域网访问）'
     btn.textContent = '移'
-    btn.className = 'frost-btn'
+    btn.style.cssText = 'border:0;background:transparent;color:#4a5578;font-size:12px;cursor:pointer;padding:2px 6px;border-radius:8px;line-height:1;'
     btn.addEventListener('mouseenter', function () { btn.style.background = 'rgba(109,124,255,0.22)' })
     btn.addEventListener('mouseleave', function () { btn.style.background = 'transparent' })
     btn.addEventListener('mousedown', function (e) { e.stopPropagation() })
     btn.addEventListener('click', function (e) { e.stopPropagation(); toggleMobile(btn) })
-    var minBtn = document.getElementById('frost-min')
-    if (minBtn) titlebar.insertBefore(btn, minBtn)
-    else titlebar.appendChild(btn)
+    ctl.appendChild(btn)
     return true
   }
   function toggleMobile (btn) {
@@ -697,21 +711,17 @@ const ARCHIVE_JS = `
   style.textContent = css
   document.head.appendChild(style)
 
-  // 按钮挂到顶部标题框（最小化按钮左侧）
-  var titlebar = document.getElementById('frost-titlebar')
+  // 按钮挂到磨砂控制条（❄ 图标左侧）
+  var ctl = document.getElementById('frost-ctl')
   var btn = el('button', null, '📁')
   btn.id = 'archive-btn'
   btn.title = '已归档对话'
-  btn.className = 'frost-btn'
+  btn.style.cssText = 'border:0;background:transparent;color:#4a5578;font-size:13px;cursor:pointer;padding:2px 6px;border-radius:8px;line-height:1;'
   btn.addEventListener('mouseenter', function () { btn.style.background = 'rgba(109,124,255,0.22)' })
   btn.addEventListener('mouseleave', function () { btn.style.background = 'transparent' })
   btn.addEventListener('mousedown', function (e) { e.stopPropagation() })
   btn.addEventListener('click', function (e) { e.stopPropagation(); togglePanel() })
-  if (titlebar) {
-    var minBtn = document.getElementById('frost-min')
-    if (minBtn) titlebar.insertBefore(btn, minBtn)
-    else titlebar.appendChild(btn)
-  }
+  if (ctl) ctl.insertBefore(btn, ctl.firstChild)
 
   // 面板
   var panel = el('div')
@@ -929,7 +939,7 @@ function createWindow () {
     win.webContents.executeJavaScript(`(function () {
       var root = document.documentElement
       var out = {
-        hasCtl: !!document.getElementById('frost-titlebar'),
+        hasCtl: !!document.getElementById('frost-ctl'),
         htmlBg: getComputedStyle(root).backgroundColor,
         htmlBgImage: getComputedStyle(root).backgroundImage.slice(0, 60),
         frostAlpha: root.style.getPropertyValue('--frost-alpha'),
@@ -1190,7 +1200,6 @@ ipcMain.handle('frost:mobile-toggle', async (e) => {
   if (win && !win.isDestroyed()) win.loadURL(TARGET_URL)
   return { ok: true, url: TARGET_URL }
 })
-
 
 app.whenReady().then(async () => {
   const boot = await ensureDshService()
