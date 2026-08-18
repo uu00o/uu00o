@@ -46,7 +46,7 @@ try {
   # If you are behind a slow network, uncomment the mirror lines:
   # $env:npm_config_registry = 'https://registry.npmmirror.com'
   # $env:npm_config_electron_mirror = 'https://npmmirror.com/mirrors/electron/'
-  & $npm install --no-audit --no-fund --install-strategy=nested
+  & $npm install --no-audit --no-fund
   if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
 } finally { Pop-Location }
 
@@ -70,6 +70,14 @@ if (-not (Test-Path (Join-Path $dshSrc 'lib\bin.js'))) {
 if (Test-Path $vendorDshDir) { Remove-Item -Recurse -Force $vendorDshDir }
 robocopy $dshSrc $vendorDshDir /E /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -gt 7) { Write-Host 'ERROR: robocopy failed' -ForegroundColor Red; exit 1 }
+
+# npm 默认扁平安装（hoisted）：@deepseek-ai/dsh 的依赖在顶层 node_modules，
+# 这里把顶层依赖复制进 vendor/dsh/node_modules（排除构建工具），使 vendor 自包含。
+Write-Host '  copying hoisted top-level dependencies into vendor/dsh/node_modules ...'
+$topNM = Join-Path $root 'node_modules'
+$vendorNM = Join-Path $vendorDshDir 'node_modules'
+robocopy $topNM $vendorNM /E /XD .bin electron electron-packager @electron @malept @sindresorhus @szmarczak @types @xmldom /NFL /NDL /NJH /NJS /NP | Out-Null
+if ($LASTEXITCODE -gt 7) { Write-Host 'WARN: top-level dep copy reported issues' -ForegroundColor Yellow }
 
 # --- 3.5 patch the bundled dsh-host-webserver host schema so --host <lan-ip> is accepted ---
 # DSH 0.1.0-rc.6 官方 schema 只允许 127.0.0.1 / 0.0.0.0；放宽为任意 host 字符串，
@@ -118,7 +126,9 @@ if ($LASTEXITCODE -gt 7) { Write-Host 'ERROR: vendor copy failed' -ForegroundCol
 
 # --- 6. done ---
 $final = Join-Path $out 'DSHFrostedGlass-win32-x64'
-$sizeMB = [math]::Round(((Get-ChildItem $final -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 0)
+try {
+  $sizeMB = [math]::Round(((Get-ChildItem $final -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 0)
+} catch { $sizeMB = -1 }
 Write-Host ''
 Write-Host "===== BUILD DONE =====" -ForegroundColor Green
 Write-Host "Package folder: $final  ($sizeMB MB)"
