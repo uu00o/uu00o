@@ -1,11 +1,15 @@
 {
   "name": "dsh-frosted-electron",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "DSH Web GUI 透明磨砂玻璃窗口壳：无边框透明窗口加载 http://127.0.0.1:3080，透明度可调，透过窗口看到桌面",
+  "description": "DSH (DeepSeek Harness) Web GUI frosted-glass desktop shell: one-click launch of the harness plus a borderless translucent window with adjustable opacity, archived-session viewer, mobile LAN control, and a chat/SSH/task-board tab bar. Self-contained distribution bundles node.exe + the full @deepseek-ai/dsh CLI.",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "powershell -ExecutionPolicy Bypass -File build.ps1"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.1.0-rc.6"
   },
   "devDependencies": {
     "electron": "^33.0.0",
