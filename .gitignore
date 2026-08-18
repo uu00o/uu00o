@@ -35,3 +35,10 @@ desktop.ini
 # 敏感信息
 .env
 *.local
+
+# frosted-electron 构建产物/运行时依赖（不入库）
+frosted-electron/vendor/
+frosted-electron/node_modules/
+frosted-electron/dist/
+frosted-electron/.electron-cache/
+frosted-electron/.npm-cache/
