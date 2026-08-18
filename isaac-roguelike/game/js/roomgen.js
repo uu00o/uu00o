@@ -72,23 +72,57 @@
     return { tiles, doorTiles, w: W, h: H };
   }
 
-  // 敌人在房间内的随机出生点（避开中心与门口）
-  function spawnPoint(rng, tiles) {
+  // 敌人在房间内的随机出生点（避开中心，可选避开玩家出生点）
+  // opts: { avoidX, avoidY, minDist } — avoidX/Y 为房间坐标（格），minDist 为最小距离
+  function spawnPoint(rng, tiles, opts) {
+    opts = opts || {};
     const W = tiles[0].length, H = tiles.length;
     const midX = Math.floor(W / 2), midY = Math.floor(H / 2);
-    for (let i = 0; i < 200; i++) {
+    const hasAvoid = opts.avoidX !== undefined && opts.avoidY !== undefined;
+    const minDist = opts.minDist || 0;
+    for (let i = 0; i < 400; i++) {
       const x = rng.int(1, W - 2);
       const y = rng.int(1, H - 2);
       if (tiles[y][x] !== T.FLOOR) continue;
       if (Math.abs(x - midX) <= 1 && Math.abs(y - midY) <= 1) continue;
+      if (hasAvoid) {
+        const d = Math.hypot(x + 0.5 - opts.avoidX, y + 0.5 - opts.avoidY);
+        if (d < minDist) continue;
+      }
       return { x, y };
     }
-    return { x: 2, y: 2 };
+    // 兜底：遍历选择离玩家最远的可行地板格
+    let best = null, bestD = -1;
+    for (let y = 1; y < H - 1; y++) {
+      for (let x = 1; x < W - 1; x++) {
+        if (tiles[y][x] !== T.FLOOR) continue;
+        const d = hasAvoid ? Math.hypot(x + 0.5 - opts.avoidX, y + 0.5 - opts.avoidY) : 0;
+        if (d > bestD) { bestD = d; best = { x, y }; }
+      }
+    }
+    return best || { x: 2, y: 2 };
+  }
+
+  // 从期望位置向外螺旋搜索最近的可行地板格（出生/传送点校验，返回格坐标）
+  function findSafeSpawn(tiles, tx, ty) {
+    const W = tiles[0].length, H = tiles.length;
+    const limit = Math.max(W, H);
+    for (let r = 0; r < limit; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = tx + dx, y = ty + dy;
+          if (x < 0 || y < 0 || x >= W || y >= H) continue;
+          if (tiles[y][x] === T.FLOOR) return { x, y };
+        }
+      }
+    }
+    return { x: Math.floor(W / 2), y: Math.floor(H / 2) };
   }
 
   function isSolid(tile) {
     return tile === T.WALL || tile === T.ROCK;
   }
 
-  return { T, generateRoom, spawnPoint, isSolid };
+  return { T, generateRoom, spawnPoint, findSafeSpawn, isSolid };
 });

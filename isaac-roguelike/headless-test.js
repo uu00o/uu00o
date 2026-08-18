@@ -104,6 +104,14 @@ if (target) {
   const n0 = g2.current.enemies.length;
   check('房间内敌人已生成 (' + n0 + ')', n0 > 0);
   check('房间初始锁定', g2.current.locked === true);
+  // 出生位置校验：玩家不在墙/岩石里
+  check('玩家出生不在障碍物内', !g2.solidAt(g2.player.x, g2.player.y, 0.28));
+  // 敌人远离玩家出生点（>= 2.5 格）
+  let minED = Infinity;
+  for (const e of g2.current.enemies) {
+    minED = Math.min(minED, Math.hypot(e.x - g2.player.x, e.y - g2.player.y));
+  }
+  check('敌人与玩家出生距离 >= 2.5', minED >= 2.5, 'min=' + minED.toFixed(2));
   // 泪滴击杀验证：把玩家和敌人传送到房间中心（保证空旷），贴近点射
   const e0 = g2.current.enemies[0];
   e0.hp = 0.5;
@@ -148,7 +156,10 @@ if (bossRoom) {
   const boss = g4.current.enemies.find((e) => e.type === 'boss');
   check('Boss 已生成', !!boss);
   check('Boss 房锁定', g4.current.locked);
+  check('玩家出生不在障碍物内', !g4.solidAt(g4.player.x, g4.player.y, 0.28));
   if (boss) {
+    check('Boss 远离玩家出生点', Math.hypot(boss.x - g4.player.x, boss.y - g4.player.y) >= 3.5,
+      Math.hypot(boss.x - g4.player.x, boss.y - g4.player.y).toFixed(2));
     boss.spawned = true;   // 禁用半血召唤，避免干扰测试
     boss.hp = 1;
     let guard = 0;

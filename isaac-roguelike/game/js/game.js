@@ -71,13 +71,22 @@
       const isItem = roomData.type === C.RT.ITEM;
       const isStart = roomData.type === C.RT.START;
 
-      // 敌人
+      // 先确定玩家出生点（入口方向或中心），校验并修正到安全地板格
+      const entryTile = this.computeEntryTile(roomData);
+      const safeSpawn = roomgen.findSafeSpawn(layout.tiles, entryTile.x, entryTile.y);
+      const spawnX = safeSpawn.x + 0.5;
+      const spawnY = safeSpawn.y + 0.5;
+
+      // 敌人：远离玩家出生点刷新
+      const enemyAvoid = { avoidX: spawnX, avoidY: spawnY };
       for (const e of roomData.enemies) {
-        const p = roomgen.spawnPoint(this.rng, layout.tiles);
+        const p = roomgen.spawnPoint(this.rng, layout.tiles,
+          Object.assign({ minDist: 3.2 }, enemyAvoid));
         enemies.push(new Enemy(e.type, p.x + 0.5, p.y + 0.5, this.floor));
       }
       if (isBoss) {
-        const p = roomgen.spawnPoint(this.rng, layout.tiles);
+        const p = roomgen.spawnPoint(this.rng, layout.tiles,
+          Object.assign({ minDist: 4.2 }, enemyAvoid));
         enemies.push(new Enemy('boss', p.x + 0.5, p.y + 0.5, this.floor));
       }
 
@@ -109,26 +118,26 @@
         prevPlayerPos: null
       };
 
-      // 玩家入房位置（出生点或门内侧）
+      // 玩家入房位置（已校验安全，不在墙/岩石内）
       if (!this.player) {
-        this.player = new Player(C.ROOM_W / 2, C.ROOM_H / 2);
+        this.player = new Player(spawnX, spawnY);
       } else {
-        this.placePlayerAtEntry(roomData);
+        this.player.x = spawnX;
+        this.player.y = spawnY;
       }
       this._enteredFrom = null;
     }
 
-    // 玩家进入新房间的位置：对应方向门内侧
-    placePlayerAtEntry(roomData) {
+    // 玩家出生/传送点（格坐标）：_enteredFrom 为「从哪个门进入」
+    // 出生点在对应门内侧，避免卡在墙/岩石里（后续 findSafeSpawn 修正）
+    computeEntryTile(roomData) {
       const dir = this._enteredFrom;
-      const midX = C.ROOM_W / 2, midY = C.ROOM_H / 2;
-      let px = midX, py = midY;
-      if (dir === C.DIR.N) { px = midX; py = C.ROOM_H - 2.2; }
-      else if (dir === C.DIR.S) { px = midX; py = 2.2; }
-      else if (dir === C.DIR.E) { px = 2.2; py = midY; }
-      else if (dir === C.DIR.W) { px = C.ROOM_W - 2.2; py = midY; }
-      this.player.x = px;
-      this.player.y = py;
+      const midX = Math.floor(C.ROOM_W / 2), midY = Math.floor(C.ROOM_H / 2);
+      if (dir === C.DIR.S) return { x: midX, y: 2 };              // 从南门进 → 房间顶部
+      if (dir === C.DIR.N) return { x: midX, y: C.ROOM_H - 3 };   // 从北门进 → 房间底部
+      if (dir === C.DIR.W) return { x: 2, y: midY };              // 从西门进 → 房间右侧
+      if (dir === C.DIR.E) return { x: C.ROOM_W - 3, y: midY };   // 从东门进 → 房间左侧
+      return { x: midX, y: midY };                                // 首次出生：房间中心
     }
 
     // ---------- 工具 ----------
