@@ -41,3 +41,6 @@ frosted-electron/node_modules/
 frosted-electron/dist/
 frosted-electron/.electron-cache/
 frosted-electron/.npm-cache/
+
+# 核心记忆库
+!/core-memory/
